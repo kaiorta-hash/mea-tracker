@@ -1,0 +1,1089 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>MEA-CartPole Design Tracker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style id="app-style">
+/* Layout: instrument-panel header, loop strip, then a two-pane tree + inspector. */
+:root{
+  --bg:#F2F5F6; --surface:#FFFFFF; --surface-2:#E8EEF0; --ink:#13212B; --ink-2:#465763; --ink-3:#7A8893;
+  --line:#D2DBE0; --accent:#0B6E78; --accent-soft:#D3EBED;
+  --st-todo:#7A8893; --st-research:#2F6FB5; --st-proposed:#A3620A; --st-decided:#0B6E78;
+  --st-build:#6A4DB0; --st-verified:#2E7D46; --st-blocked:#B23A3A;
+  --s1:#0B6E78; --s2:#3A63C9; --s3:#C2410C; --s4:#7C3AED; --s5:#1F8A4C; --s6:#B8326B;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1418; --surface:#141E25; --surface-2:#1B272F; --ink:#E3EBEF; --ink-2:#A6B5BE; --ink-3:#74848E;
+  --line:#2A3842; --accent:#4FC1C9; --accent-soft:#163539;
+  --st-todo:#8C9BA5; --st-research:#80B1EA; --st-proposed:#E8B24F; --st-decided:#4FC1C9;
+  --st-build:#B39EF1; --st-verified:#6FCF8E; --st-blocked:#F08484;
+  --s1:#4FC1C9; --s2:#86A7F2; --s3:#F2925F; --s4:#B697F6; --s5:#5FCB8A; --s6:#EE7FAD; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1418; --surface:#141E25; --surface-2:#1B272F; --ink:#E3EBEF; --ink-2:#A6B5BE; --ink-3:#74848E;
+  --line:#2A3842; --accent:#4FC1C9; --accent-soft:#163539;
+  --st-todo:#8C9BA5; --st-research:#80B1EA; --st-proposed:#E8B24F; --st-decided:#4FC1C9;
+  --st-build:#B39EF1; --st-verified:#6FCF8E; --st-blocked:#F08484;
+  --s1:#4FC1C9; --s2:#86A7F2; --s3:#F2925F; --s4:#B697F6; --s5:#5FCB8A; --s6:#EE7FAD; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.45}
+.wrap{max-width:1320px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mono{font-family:var(--mono)}
+
+/* header */
+header.top{border-bottom:1px solid var(--line);background:var(--surface)}
+header.top .wrap{display:grid;grid-template-columns:1fr auto;gap:24px;padding-block:22px 18px;align-items:start}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+h1{font-family:var(--display);font-weight:600;font-size:clamp(28px,4vw,40px);line-height:1.02;margin:6px 0 6px;letter-spacing:.005em;text-wrap:balance}
+.lede{color:var(--ink-2);max-width:62ch;margin:0}
+.gates{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:18px}
+.gate{border:1px solid var(--line);border-radius:6px;padding:10px 12px;background:var(--bg);min-width:0;text-align:left;display:block;width:100%}
+.gate:hover{border-color:var(--accent)}
+.gate[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft)}
+.gate .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.gate .num{font-family:var(--display);font-size:26px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.1}
+.gate .sub{font-size:12px;color:var(--ink-2)}
+.bar{height:4px;border-radius:2px;background:var(--surface-2);overflow:hidden;margin-top:6px}
+.bar>i{display:block;height:100%;background:var(--accent)}
+.gate.review .num{color:var(--st-proposed)}
+.gate.review .bar>i{background:var(--st-proposed)}
+.mea{display:flex;flex-direction:column;align-items:center;gap:6px}
+.mea svg{display:block}
+.mea .cap{font-family:var(--mono);font-size:10px;color:var(--ink-3);text-align:center;line-height:1.35;width:180px}
+
+/* loop strip */
+section.loop{padding-block:18px 4px}
+.sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.sec-h h2{font-family:var(--display);font-weight:600;font-size:20px;margin:0;letter-spacing:.01em}
+.sec-h p{margin:0;color:var(--ink-3);font-size:12px}
+.strip{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:0;align-items:stretch}
+.stage{position:relative;text-align:left;border:1px solid var(--line);background:var(--surface);padding:10px 12px 10px;min-width:0;display:flex;flex-direction:column;gap:4px;border-radius:0;margin-left:-1px}
+.stage:first-child{border-radius:6px 0 0 6px;margin-left:0}
+.stage:last-child{border-radius:0 6px 6px 0}
+.stage:hover{background:var(--surface-2)}
+.stage .n{font-family:var(--mono);font-size:11px;color:var(--accent)}
+.stage .t{font-family:var(--display);font-weight:600;font-size:17px;line-height:1.1}
+.stage .s{font-size:11.5px;color:var(--ink-2);line-height:1.3;flex:1}
+.stage .m{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--ink-3);gap:6px}
+.stage .m b{font-weight:500;color:var(--st-proposed)}
+.stage:not(:last-child)::after{content:"";position:absolute;right:-6px;top:50%;width:10px;height:10px;border-top:1px solid var(--line);border-right:1px solid var(--line);background:var(--surface);transform:translateY(-50%) rotate(45deg);z-index:1}
+.stage:hover::after{background:var(--surface-2)}
+.return{font-family:var(--mono);font-size:11px;color:var(--ink-3);text-align:right;margin-top:6px}
+.others{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-top:12px}
+.other{text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:9px 12px;min-width:0;display:flex;flex-direction:column;gap:3px}
+.other:hover{background:var(--surface-2)}
+.other .t{font-family:var(--display);font-weight:600;font-size:16px;line-height:1.1}
+
+/* main */
+main .wrap{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:20px;padding-block:18px 28px;align-items:start}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.toolbar input[type=search]{flex:1 1 200px;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+.toolbar select{padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);max-width:100%}
+.btn{padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);font-size:13px;white-space:nowrap}
+.btn:hover{background:var(--surface-2)}
+.btn[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--ink)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--bg);font-weight:600}
+.btn.danger{color:var(--st-blocked)}
+.btn.danger.armed{background:var(--st-blocked);border-color:var(--st-blocked);color:var(--bg)}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:11.5px;color:var(--ink-3);margin:0 0 10px}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+
+.treebox{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 6px 10px;overflow-x:auto}
+ul.tree,ul.tree ul{list-style:none;margin:0;padding:0}
+ul.tree ul{margin-left:13px;padding-left:10px;border-left:1px solid var(--line)}
+.row{display:grid;grid-template-columns:20px 14px minmax(0,1fr) auto;align-items:center;gap:6px;padding:5px 8px 5px 2px;border-radius:5px;cursor:pointer;min-height:32px}
+.row:hover{background:var(--surface-2)}
+.row.sel{background:var(--accent-soft)}
+.row.dim .ttl{color:var(--ink-3)}
+.row.area .ttl{font-weight:600}
+.row.top .ttl{font-family:var(--display);font-size:17px;font-weight:600;letter-spacing:.01em}
+.chev{width:20px;height:20px;border:0;background:none;padding:0;color:var(--ink-3);display:grid;place-items:center;border-radius:4px}
+.chev:hover{background:var(--line)}
+.chev svg{transition:transform .15s}
+.chev[aria-expanded=false] svg{transform:rotate(-90deg)}
+.ttl{min-width:0;overflow-wrap:anywhere}
+.meta{display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.chip.need{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,var(--line))}
+.chip.need.full{background:var(--accent-soft)}
+.chip.due{color:var(--ink-2)}
+.chip.due.soon{color:var(--st-proposed);border-color:color-mix(in srgb,var(--st-proposed) 50%,var(--line))}
+.chip.due.over{color:var(--st-blocked);border-color:var(--st-blocked);font-weight:500}
+.chip.due.done{opacity:.55;text-decoration:line-through}
+.sted .lk{display:grid;grid-template-columns:170px 1fr auto;gap:6px;margin-bottom:6px}
+.sted .lk select,.sted .lk input,.sted input{min-width:0;width:100%;box-sizing:border-box}
+.sted .lab{font-size:12px;color:var(--ink-3);margin:10px 0 6px}
+.sted .row-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+@media (max-width:640px){.sted .lk{grid-template-columns:1fr}}
+.dueline{font-family:var(--mono);font-size:11px;color:var(--ink-2);margin-top:4px}
+.dueline.over{color:var(--st-blocked)} .dueline.soon{color:var(--st-proposed)}
+.syncpanel{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:12px 14px;margin-bottom:10px;font-size:13px}
+.syncpanel p{margin:0 0 8px;line-height:1.5}
+.syncpanel .grid2{margin-bottom:8px}
+.syncpanel input{width:100%;box-sizing:border-box}
+.syncpanel .row-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.syncpanel .ok{color:var(--st-verified)}
+.chip{font-family:var(--mono);font-size:10.5px;color:var(--ink-2);border:1px solid var(--line);border-radius:3px;padding:1px 5px;white-space:nowrap}
+.pill{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap;color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent);border:1px solid color-mix(in srgb,var(--c) 35%,transparent)}
+.prog{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.prog .bar{width:54px;margin:0}
+
+/* kind glyphs */
+.g{width:11px;height:11px;display:inline-block;justify-self:center}
+.g.area{width:12px;height:9px;border:1.5px solid var(--ink-3);border-radius:2px}
+.g.decision{width:9px;height:9px;transform:rotate(45deg);border:1.5px solid var(--st-proposed);background:color-mix(in srgb,var(--st-proposed) 25%,transparent)}
+.g.build{width:10px;height:10px;background:var(--ink-2);border-radius:2px}
+.g.test{border:1.5px solid var(--st-verified);border-radius:50%}
+.g.question{border:1.5px dashed var(--st-research);border-radius:50%}
+
+/* inspector */
+aside.insp{position:sticky;top:12px;background:var(--surface);border:1px solid var(--line);border-radius:8px;max-height:calc(100vh - 24px);overflow:auto}
+.insp-h{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);gap:8px}
+.insp-h .crumb{font-family:var(--mono);font-size:11px;color:var(--ink-3);overflow-wrap:anywhere}
+.insp-b{padding:12px 14px 16px;display:flex;flex-direction:column;gap:12px}
+.insp .x{display:none}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field>label,.field>.lab{font-family:var(--mono);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)}
+.field input,.field select,.field textarea{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
+.field textarea{min-height:120px;resize:vertical;line-height:1.45}
+.field textarea.auto{min-height:0;resize:none;overflow:hidden}
+.field textarea.short{min-height:52px}
+#e-notes{min-height:90px}
+.field.sect{border-top:1px solid var(--line);padding-top:10px}
+.lst{display:flex;flex-direction:column;gap:5px}
+.li{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:6px;align-items:start}
+.li input[type=checkbox]{width:16px;height:16px;margin:8px 0 0;accent-color:var(--accent)}
+.li textarea{padding:5px 8px;font-size:13px}
+.lst.bugs .bul{width:7px;height:7px;border-radius:50%;background:var(--st-blocked);margin:11px 0 0 5px}
+.lst.files .bul{width:7px;height:7px;border-radius:2px;background:var(--ink-3);margin:11px 0 0 5px}
+.lst.files textarea{font-family:var(--mono);font-size:12px}
+.btn.xs{padding:3px 8px;font-size:12px}
+.btn.add{align-self:flex-start}
+.field input.title-in{font-family:var(--display);font-size:20px;font-weight:600;padding:6px 9px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.opt{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:6px;align-items:center}
+.opt input[type=radio]{width:auto;accent-color:var(--accent)}
+.opts{display:flex;flex-direction:column;gap:6px}
+.depchips{display:flex;flex-wrap:wrap;gap:6px}
+.dep{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:4px;padding:2px 4px 2px 7px;font-size:12px;background:var(--bg);max-width:100%}
+.dep button{border:0;background:none;padding:0 3px;color:var(--ink-3)}
+.dep .go{color:var(--ink);text-align:left;overflow-wrap:anywhere}
+.actions{display:flex;flex-wrap:wrap;gap:6px;border-top:1px solid var(--line);padding-top:12px}
+.empty{padding:28px 16px;color:var(--ink-3);text-align:center}
+.ro-note{font-size:12px;color:var(--ink-3);background:var(--surface-2);border-radius:6px;padding:8px 10px}
+.donechip{font-size:12px;color:var(--ink-2)}
+
+/* save bar + banner */
+.savebar{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);box-shadow:0 -6px 20px color-mix(in srgb,var(--ink) 10%,transparent)}
+.savebar .wrap{display:flex;align-items:center;gap:10px;padding-block:10px;flex-wrap:wrap}
+.savebar .msg{flex:1;min-width:180px;font-size:13px}
+.banner{background:color-mix(in srgb,var(--st-proposed) 14%,var(--surface));border-bottom:1px solid var(--line)}
+.banner .wrap{display:flex;gap:10px;align-items:center;padding-block:10px;flex-wrap:wrap}
+.banner p{margin:0;flex:1;min-width:200px;font-size:13px}
+.toast{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:13px;z-index:30}
+
+/* full-cycle diagram */
+section.cycle{padding-block:8px 140px}
+.cyc-lede{color:var(--ink-2);margin:0 0 12px;max-width:72ch}
+.streams{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.stream{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px 5px 9px;font-size:13px;text-align:left}
+.stream:hover{background:var(--surface-2)}
+.stream .dot{width:10px;height:10px;border-radius:50%;background:var(--c);flex:none}
+.stream small{color:var(--ink-3);font-family:var(--mono);font-size:11px}
+.stream[aria-pressed=true]{border-color:var(--c);background:color-mix(in srgb,var(--c) 14%,var(--surface))}
+.cyclebox{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow-x:auto}
+.cyclebox svg{display:block;width:100%;min-width:840px;height:auto}
+.cyc-key{display:flex;flex-wrap:wrap;gap:16px;font-size:11.5px;color:var(--ink-3);margin-top:8px}
+.cyc-key span{display:inline-flex;align-items:center;gap:6px}
+.cyc-key i{display:inline-block;width:22px;height:0;border-top:1.6px solid var(--ink-2)}
+.cyc-key i.d{border-top:1.4px dashed var(--ink-3)}
+.cyc-detail{margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.cyc-detail h3{font-family:var(--display);font-weight:600;font-size:19px;margin:0 0 6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cyc-detail h3 small{font-family:var(--body);font-weight:400;font-size:13px;color:var(--ink-3)}
+.cyc-detail ul{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:6px 18px}
+.cyc-detail li{font-size:13px;color:var(--ink-2);min-width:0}
+.cyc-detail li button{border:0;background:none;padding:0;font-weight:600;color:var(--ink);text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
+.cyc-hint{color:var(--ink-3);font-size:13px;margin:0}
+.cy-node,.cy-sup,.cy-band{cursor:pointer;transition:opacity .15s}
+.cy-node rect.box,.cy-band rect.box{fill:var(--surface);stroke:var(--line);stroke-width:1.2}
+.cy-node:hover rect.box,.cy-band:hover rect.box,.cy-node:focus-visible rect.box{fill:var(--surface-2)}
+.cy-node.dish rect.box{fill:var(--surface-2)}
+.cy-sup rect.box{fill:var(--bg);stroke:var(--ink-3);stroke-width:1.1;stroke-dasharray:5 4}
+.cy-sup:hover rect.box,.cy-sup:focus-visible rect.box{stroke:var(--accent)}
+.cy-node.hl rect.box,.cy-sup.hl rect.box,.cy-band.hl rect.box{stroke:var(--c);stroke-width:2.6;stroke-dasharray:none}
+.cy-dimmed{opacity:.28}
+.cy-n{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;fill:var(--accent)}
+.cy-t{font-family:var(--display);font-weight:600;font-size:18px;fill:var(--ink)}
+.cy-k{font-family:var(--body);font-size:11.5px;fill:var(--ink-2)}
+.cy-m{font-family:var(--mono);font-size:10.5px;fill:var(--ink-3)}
+.cy-rv{font-family:var(--mono);font-size:10.5px;fill:var(--st-proposed)}
+.cy-track{fill:var(--surface-2)}
+.cy-node.dish .cy-track{fill:var(--line)}
+.cy-fill{fill:var(--accent)}
+.cy-arrow{fill:none;stroke:var(--ink-2);stroke-width:1.7}
+.cy-arrow.fb{stroke:var(--st-proposed);stroke-dasharray:6 4}
+.cy-tap{fill:none;stroke:var(--ink-3);stroke-width:1.1;stroke-dasharray:3 4}
+.cy-ah{fill:var(--ink-2)}
+.cy-ah.fb{fill:var(--st-proposed)}
+.cy-lbl{font-family:var(--mono);font-size:11.5px;fill:var(--ink-2);paint-order:stroke;stroke:var(--surface);stroke-width:5px;stroke-linejoin:round}
+.cy-lbl.fb{fill:var(--st-proposed)}
+.cy-conn{fill:none;stroke:var(--accent);stroke-width:1.5;stroke-dasharray:5 4;opacity:0;transition:opacity .15s;pointer-events:none}
+.cy-conn.on{opacity:1}
+.cy-elec{fill:var(--ink-3)}
+.cy-elec.in{fill:var(--accent)}
+.cy-elec.out{fill:var(--st-proposed)}
+
+@media (max-width:1100px){
+  .strip{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+  .stage,.stage:first-child,.stage:last-child{border-radius:6px;margin-left:0}
+  .stage::after{display:none}
+  .others{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media (max-width:900px){
+  main .wrap{grid-template-columns:minmax(0,1fr)}
+  aside.insp{position:fixed;left:0;right:0;bottom:0;top:auto;max-height:78vh;border-radius:12px 12px 0 0;z-index:25;padding-bottom:env(safe-area-inset-bottom,0px);box-shadow:0 -10px 30px color-mix(in srgb,var(--ink) 20%,transparent)}
+  aside.insp.closed{display:none}
+  .insp .x{display:inline-block}
+  header.top .wrap{grid-template-columns:1fr}
+  .mea{display:none}
+  .gates{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:560px){
+  .strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .others{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .row{grid-template-columns:20px 14px minmax(0,1fr)}
+  .row .meta{grid-column:3;justify-content:flex-start}
+  .grid2{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<div id="app"></div>
+<script type="application/json" id="tracker-data">{"schema": 2, "saved": "2026-10-26", "nodes": [{"id": "root", "parent": null, "title": "MEA-CartPole: ready for the first live culture", "kind": "area", "status": "todo", "owner": "Kai, Ryan", "gate": "", "notes": "Each item is a chunk of the system to get working, or a decision the leads need to make. Open a chunk to see what it needs, the known bugs found in the code, and which files to start from. Work toward the milestones in order: rig works, then the full loop on saline, then the first culture.", "src": "", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "prep", "parent": "root", "title": "Part 1. Pre-training characterization", "kind": "area", "status": "todo", "owner": "Syrine, Skylar, Pranaya, Kai", "gate": "", "notes": "Run on every culture before training. Each step produces a setting the next step or the game needs.", "src": "", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": [], "spec": "spike validation, mapping, channel selection"}, {"id": "p1a", "parent": "prep", "title": "1A. Spike validation", "kind": "area", "status": "todo", "owner": "Pranaya, Skylar", "gate": "", "notes": "", "src": "", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "d-spike", "parent": "p1a", "title": "Which spike detection rule do the loop and mapping share?", "kind": "decision", "status": "research", "owner": "Pranaya", "gate": "saline", "notes": "Today the game uses 5 x MAD noise re-estimated every 100 ms window; mapping uses 5 x RMS and 3 SD. Alon and Feldman asked for template matching in the loop, matched offline. Pick one definition (threshold, dead time, noise estimate) and say where templates come from.", "src": "Controls docs; Encoding v2; code audit 1A", "deps": ["c-saline"], "options": ["Per-channel threshold set from saline false-positive rate", "5 x MAD per window (current game code)", "Fixed per-session noise level from a spontaneous block, plus template matching"], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "c-spikes", "parent": "p1a", "title": "Get spike detection validated", "kind": "build", "status": "build", "owner": "Pranaya, Skylar", "gate": "saline", "notes": "", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["d-spike"], "options": [], "chosen": null, "done": "On pure noise, 0.01 or fewer false spikes per electrode per 100 ms window with planted-spike recall unchanged; saline false-positive rate measured per channel; the detector is written up (filter, threshold, dead time).", "needs": [{"t": "Filter with a margin and trim it, so window edges stop producing spikes", "ok": false}, {"t": "1 ms refractory period", "ok": false}, {"t": "Noise level fixed per session from a spontaneous block", "ok": false}, {"t": "Spike waveform extraction and checks (none exist yet)", "ok": false}, {"t": "Saline false-positive rate per channel (from the saline run)", "ok": false}, {"t": "Ground-truth test: planted spikes in offline_checks.py, or MEArec", "ok": false}], "bugs": ["0.154 false spikes per electrode per 100 ms on pure noise, all at window edges (mea_device.py:45-59, P13)", "Noise re-estimated every window, so a burst raises its own threshold", "Legacy spike.py:63-71 counts samples above threshold, not spikes; spike.py:35 derives the wrong sample rate"], "files": ["Baseline-Protocol/Hardware/mea_device.py (count_spikes)", "Project-Documentation/Evidence/offline_checks.py", "Saline-Test/mea_kit/common/signal.py (Abbas-changes)"]}, {"id": "c-spont", "parent": "p1a", "title": "Get a spontaneous-recording mode and a culture readiness check", "kind": "build", "status": "todo", "owner": "Pranaya", "gate": "culture", "notes": "Decided: start each culture only after stable spontaneous bursting, not after a day count (Alon and Feldman).", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["c-record", "c-logging"], "options": [], "chosen": null, "done": "The rig can record N minutes with no stimulation to disk, and a script says whether the culture shows stable spontaneous bursting.", "needs": [{"t": "Recording mode with stimulation off in the game code (the game has none)", "ok": false}, {"t": "A number that defines stable bursting (none proposed yet)", "ok": false}, {"t": "Raw data saved in a format the analysis loaders read", "ok": false}], "bugs": ["No spontaneous mode in the game loop (P18); only the Saline kit's 60 s baseline block records without stimulation"], "files": ["Saline-Test/mea_kit/hardware/saline_protocol.py (baseline block)", "Project-Documentation/Pipeline-Review.md (P18)"]}, {"id": "p1b", "parent": "prep", "title": "1B. Functional mapping and stimulus calibration", "kind": "area", "status": "todo", "owner": "Syrine, Kai, Abbas", "gate": "", "notes": "", "src": "", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "d-mapping", "parent": "p1b", "title": "Adopt the adapted UCSC mapping method as standard?", "kind": "decision", "status": "proposed", "owner": "Syrine", "gate": "culture", "notes": "Syrine's proposal: one unit per electrode, baseline-corrected C1 (C1 minus chance), one-sided test with Benjamini-Hochberg FDR q = 0.05, windows 10 and 18 ms starting after the blind period, burst trials excluded (median + 3 MAD), map twice before training and once after. Already written as v2_ours_adapted.py. Also decide: does mapping fit on the same day as training (two maps of about 40 min plus a 2.5 h session)?", "src": "Mapping proposal (Syrine); code audit 1B", "deps": [], "options": ["Adopt as proposed", "Adopt, but map once before training to save time", "Skip mapping for the first cultures"], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "c-mapping", "parent": "p1b", "title": "Get the mapping pipeline running on real recordings", "kind": "build", "status": "build", "owner": "Syrine", "gate": "culture", "notes": "", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["c-saline"], "options": [], "chosen": null, "done": "run_mapping runs end to end on the Potter lab dataset and on our saline recording; saline gives about zero significant pairs.", "needs": [{"t": "Mapping code exists: v1 UCSC-faithful, v2 adapted, v3 auto-select, drift (Abbas-changes)", "ok": true}, {"t": "Tests pass on fake data (v2 recovers 10/10 planted connections)", "ok": true}, {"t": "Runs without the salpa package (use localpoly by default)", "ok": false}, {"t": "Dry run on the Potter lab 60-electrode evoked dataset", "ok": false}, {"t": "Run on the real saline recording", "ok": false}, {"t": "Measured blind window per channel fed in (from the saline run)", "ok": false}], "bugs": ["run_mapping.py:52 defaults to --cleaner salpa, and salpa is not installable, so mapping crashes", "Only ever run on fake data"], "files": ["Saline-Test/mea_kit/ucsc_mapping/v2_ours_adapted.py", "Saline-Test/mea_kit/ucsc_mapping/run_mapping.py", "Saline-Test/README.md"]}, {"id": "c-calib", "parent": "p1b", "title": "Get stimulus calibration working: amplitude sweep and frequency response", "kind": "build", "status": "build", "owner": "Kai, Abbas", "gate": "culture", "notes": "", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["c-stim"], "options": [], "chosen": null, "done": "One protocol gives A_enc (lowest amplitude that reliably evokes responses) and the usable pulse-rate range for each input electrode.", "needs": [{"t": "Amplitude series block exists (electrode 12 at 5/10/20 uA, Abbas-changes)", "ok": true}, {"t": "Stimulation units settled (see 2B)", "ok": false}, {"t": "Merge v2's 7-amplitude sweep with the mapping proposal's 3-step ramp into one protocol", "ok": false}, {"t": "Frequency-response test, 2 s trains at 10-40 Hz (missing)", "ok": false}, {"t": "Discriminability analysis between input electrodes (missing; decides bin order A or B)", "ok": false}], "bugs": [], "files": ["Saline-Test/mea_kit/hardware/config.py:55-57", "Saline-Test/mea_kit/hardware/saline_protocol.py"]}, {"id": "p1c", "parent": "prep", "title": "1C. Channel selection", "kind": "area", "status": "todo", "owner": "Kai, Syrine", "gate": "", "notes": "", "src": "", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "enc-layout", "parent": "p1c", "title": "Input and output electrode layout: fixed rows, map-selected, or hybrid?", "kind": "decision", "status": "proposed", "owner": "Syrine, Kai, leads", "gate": "culture", "notes": "Encoding v2 uses fixed geometry: input on row 8, output on row 1, reference 15, 6 input electrodes. The mapping proposal picks 2 inputs and left/right readout zones per culture from measured connectivity (v3_auto_select.py). We have only 2 generators. This shapes encoding, decoding, mapping and two controls, so decide it first.", "src": "Encoding v2 section 2; Mapping proposal", "deps": [], "options": ["Fixed v2 geometry on every culture", "Map-selected inputs and zones per culture", "Hybrid: fixed rows, mapping used to verify connectivity and pick backups"], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "c-chanmap", "parent": "p1c", "title": "Get the channel map: electrode position for every channel number", "kind": "build", "status": "todo", "owner": "Kai", "gate": "rig", "notes": "", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["q-lab"], "options": [], "chosen": null, "done": "channel_map.py maps all channel indices to electrode names and grid positions, with a unit test, and the stimulator index is measured to match the recording channel index.", "needs": [{"t": "MEA type, orientation and reference electrode from the lab", "ok": false}, {"t": "channel_map.py from the MCS layout for our MEA type (planned, not written)", "ok": false}, {"t": "Measured stimulator-index to recording-channel table (Saline sweep, electrode_map in analyses.py)", "ok": false}], "bugs": ["Left/right halves are channel indices 0-29 and 30-59, not positions (feedback.py:10-11)", "device_fake.py:17-25 geometry is explicitly fake"], "files": ["Saline-Test/mea_kit/saline_benchmark/analyses.py (electrode_map)", "Baseline-Protocol/Hardware/feedback.py", "Project-Documentation/Pipeline-Review.md (P15)"]}, {"id": "c-select", "parent": "p1c", "title": "Get channel selection and the baseline play run working", "kind": "build", "status": "build", "owner": "Syrine, Kai", "gate": "culture", "notes": "", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["enc-layout", "c-chanmap", "c-mapping"], "options": [], "chosen": null, "done": "For a mapped culture, the chosen inputs and readout zones are written to a config file, and a 10 min baseline play run (encoding on, feedback off) has been recorded on that layout.", "needs": [{"t": "Automatic selection written (v3_auto_select.py, fake data only)", "ok": true}, {"t": "Layout decision made", "ok": false}, {"t": "Channel map", "ok": false}, {"t": "Bin order chosen from the discriminability test", "ok": false}, {"t": "Baseline play run mode in the game", "ok": false}], "bugs": [], "files": ["Saline-Test/mea_kit/ucsc_mapping/v3_auto_select.py"]}, {"id": "loop", "parent": "root", "title": "Part 2. Main game (closed-loop training)", "kind": "area", "status": "todo", "owner": "Kai, Ryan", "gate": "", "notes": "One cycle from game state to action and back. The active game code today is Baseline-Protocol/Hardware/run_hardware.py (pure Python via pythonnet). Its chain breaks at connect(), before the first game step. No hardware path has run end to end on the rig.", "src": "", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": [], "spec": "one cycle per game step (200 ms proposed)"}, {"id": "enc", "parent": "loop", "title": "2A. CartPole state and encoding", "kind": "area", "status": "todo", "owner": "Kai", "gate": "", "notes": "", "src": "", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": [], "spec": "angle picks the electrode, velocity sets the rate"}, {"id": "d-encoding", "parent": "enc", "title": "Encoding scheme for the first cultures", "kind": "decision", "status": "proposed", "owner": "Kai", "gate": "saline", "notes": "Current Baseline code encodes only which side the pole leans (sign of angle) and ignores angular velocity. v2 proposes: angle picks 1 of 6 input electrodes (bins 0-2, 2-6, 6-12 degrees per side), angular velocity sets a 10-40 Hz pulse rate, as a continuous train. Also decide: run the amplitude arm as phase 2 or as a crossover.", "src": "Encoding v2 checkpoint; code audit 2A", "deps": [], "options": ["v2: angle picks electrode, velocity sets rate", "Baseline: lean side only (as now)", "v2 with velocity as amplitude"], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "c-encoder", "parent": "enc", "title": "Get the v2 encoder running in the loop", "kind": "build", "status": "todo", "owner": "Kai", "gate": "saline", "notes": "", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["d-encoding", "c-chanmap"], "options": [], "chosen": null, "done": "layouts.py provides BaselineLayout and the v2 layout, with unit tests: lean picks the right side, rate stays at 40 Hz or below, pulse times fall on the 20 us grid, and spacing stays even across steps.", "needs": [{"t": "v2_logic.py, test_v2_logic.py, config_v2.yaml and sim_v2.py committed to the repo (not found in any repo or folder)", "ok": false}, {"t": "layouts.py with BaselineLayout and the v2 layout (spec in T1-coordination-and-repo.md)", "ok": false}, {"t": "Continuous pulse scheduler on the 20 us grid", "ok": false}, {"t": "Channel map, so rows mean positions", "ok": false}, {"t": "Angular velocity actually read from the observation", "ok": false}], "bugs": ["Angular velocity observation[3] is never read (run_hardware.py:37)", "Legacy square.py treats radians as degrees (:76) and ms as seconds (:74); do not reuse it"], "files": ["Baseline-Protocol/Hardware/feedback.py", "Project-Documentation/Round-1-Tasks/T1-coordination-and-repo.md (v2 spec)"]}, {"id": "stim", "parent": "loop", "title": "2B. Sensory stimulation", "kind": "area", "status": "todo", "owner": "Ryan, Abbas", "gate": "", "notes": "", "src": "", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": [], "spec": "2 generators, biphasic pulses, blanking"}, {"id": "d-path", "parent": "stim", "title": "Which code path runs the loop?", "kind": "decision", "status": "research", "owner": "Ryan, Kai", "gate": "rig", "notes": "Both candidates are Python via pythonnet. The docs and CLAUDE.md call Baseline-Protocol/Hardware the active path, but all of Ryan's Oct 24 branches fix Hardware-Pythonnet-Path, and no branch fixes Baseline-Protocol. The C# files (Program.cs, MCS_interface.cs, Stimulator) are not in this repo; they live in the older Wetware and kaiorta-hash repos. Pick one path, archive the other, and only move to C# if measured pythonnet latency misses the budget.", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["c-latency"], "options": ["Baseline-Protocol/Hardware (pythonnet)", "Hardware-Pythonnet-Path with Ryan's fixes (pythonnet)", "C# loop, only if pythonnet misses the latency budget"], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "enc-pulse", "parent": "stim", "title": "Stimulation mode and pulse shape: voltage or current, which polarity?", "kind": "decision", "status": "proposed", "owner": "Abbas", "gate": "rig", "notes": "Baseline code: voltage mode, anodic-first, 75 mV x 200 us. Saline kit: cathodic-first, supports current mode (Abbas notes cathodic-first as agreed). Encoding v2: voltage, positive-first (Wagenaar 2004). In those papers polarity follows mode, so the real choice is voltage vs current. Use one mode for mapping, encoding and feedback.", "src": "Encoding v2; Abbas notes; Mapping proposal; code audit 5.2", "deps": [], "options": ["Voltage mode, positive-first biphasic", "Current mode, cathodic-first biphasic", "Measure both on saline, then pick by artifact size and blind window"], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "c-stim", "parent": "stim", "title": "Get stimulation verified on the rig", "kind": "build", "status": "build", "owner": "Ryan, Abbas", "gate": "rig", "notes": "", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["d-path", "enc-pulse", "q-mcs"], "options": [], "chosen": null, "done": "On a test probe or saline, a commanded pulse of known amplitude on a chosen electrode shows up as an artifact of the expected size on that electrode, on both generators, with the units written down.", "needs": [{"t": "Units of PrepareAndSendData settled: uV/nA or DAC steps (branches disagree)", "ok": false}, {"t": "Safe amplitude and charge limits confirmed with MCS for our electrodes", "ok": false}, {"t": "Mode set on both generators", "ok": false}, {"t": "Stimulator Connect status checked", "ok": false}, {"t": "Per-electrode routing to each generator, other electrodes grounded", "ok": false}, {"t": "Sideband and blanking timing understood (40, 800, 40)", "ok": false}, {"t": "Generator electrode-switching speed measured (needed for unstructured feedback)", "ok": false}, {"t": "Continuous train with a changing rate, or the preloaded-rates fallback", "ok": false}], "bugs": ["SetVoltageMode(0) sets generator 0 only (mea_device.py:134, P4)", "Stimulator Connect status unchecked (mea_device.py:93, P2)", "Fix branch passes the electrode index as the STG channel (mea_integration.py:238) and 1 \u003c\u003c ch overflows for ch >= 32 (:240)", "Fix branch has no routing, sideband or blanking, and its amplitude rounds to about 0 DAC steps", "Legacy main uses CMcsUsbBStimNet, which does not exist in the DLL"], "files": ["Baseline-Protocol/Hardware/mea_device.py (_setup_stimulation, _pulse_train, _send)", "Saline-Test/mea_kit/hardware/device_mcs.py (Abbas-changes)", "Project-Documentation/Evidence/McsUsbNet-API-reference.md"]}, {"id": "rec", "parent": "loop", "title": "2C. Neural response: record and detect spikes in real time", "kind": "area", "status": "todo", "owner": "Ryan, Abbas", "gate": "", "notes": "", "src": "", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": [], "spec": "60 channels at 50 kHz, artifact handling"}, {"id": "c-record", "parent": "rec", "title": "Get recording working on the rig", "kind": "build", "status": "build", "owner": "Ryan", "gate": "rig", "notes": "", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["d-path"], "options": [], "chosen": null, "done": "connect() succeeds, a 10 min test-probe recording streams every channel plus the sideband with no errors, the sample count equals 50,000 x seconds within one chunk, and values are in uV.", "needs": [{"t": "connect() gets past channel setup", "ok": false}, {"t": "Fast marshalling with Marshal.Copy (already in Baseline code)", "ok": true}, {"t": "Every data stream read, including the sideband", "ok": false}, {"t": "Conversion from raw counts to uV", "ok": false}, {"t": "Safe setup and shutdown that never needs a power cycle", "ok": false}], "bugs": ["THE CHAIN BREAKS HERE: AddBlocksAndChannels is called with SampleSizeNet types the DLL does not accept (mea_device.py:117-124, P1)", "Same call copied into the Saline kit (device_mcs.py:111-117)", "Only streams 0-59 read (mea_device.py:142, P8); short reads zero-padded (P10)", "No uV conversion; GetResolutionPerDigit unused (P11)", "connect() sits outside the try block, so a crash skips close() (run_hardware.py:27-28, P3)", "Legacy and fix branch read frames_ret from the input variable, so the buffer is likely never filled (mea_integration.py:186-190)"], "files": ["Baseline-Protocol/Hardware/mea_device.py (_setup_recording, _on_data, read_spike_counts)", "Project-Documentation/Pipeline-Review.md (P1, P8-P11)"]}, {"id": "c-window", "parent": "rec", "title": "Get stimulation-aligned windows and in-loop artifact handling", "kind": "build", "status": "todo", "owner": "Abbas, Ryan", "gate": "saline", "notes": "", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["c-record", "d-artifact"], "options": [], "chosen": null, "done": "On the rig, the first-pulse artifact lands at the same sample offset (within 1) across 100 windows, and samples inside each channel's measured blind window are excluded from spike counts.", "needs": [{"t": "Ring buffer with a running sample counter", "ok": false}, {"t": "Window aligned to the stimulation using the sideband stream", "ok": false}, {"t": "Blind window per channel measured on saline", "ok": false}, {"t": "Artifact removal method chosen for the loop", "ok": false}], "bugs": ["The listening window is not aligned to the stimulation (mea_device.py:149-162, P9)", "Software artifact removers run offline only; none is wired into a game loop"], "files": ["Baseline-Protocol/Hardware/mea_device.py:149-162", "Saline-Test/mea_kit/common/pulses.py (find_sideband_onsets)", "Saline-Test/mea_kit/artifact_removal/"]}, {"id": "d-artifact", "parent": "rec", "title": "Artifact handling in the loop", "kind": "decision", "status": "proposed", "owner": "Abbas", "gate": "saline", "notes": "Hardware blanking is on in the Baseline code and the Saline kit (the earlier claim that it was off applied only to the legacy path). Software removers exist offline: blank, template, SpikeInterface, SALPA, localpoly. SALPA's package is not installable here; localpoly is the pure-Python fallback.", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["c-saline"], "options": ["Blanking + per-channel blind window online, SALPA/localpoly offline", "Blanking + localpoly online", "Blanking + template subtraction online"], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "dec", "parent": "loop", "title": "2D. Action decoding", "kind": "area", "status": "todo", "owner": "Kai", "gate": "", "notes": "", "src": "", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": [], "spec": "left vs right readout, baseline-normalized"}, {"id": "d-decoder", "parent": "dec", "title": "Decoder design: 3 vs 3 readout electrodes, normalized to baseline", "kind": "decision", "status": "proposed", "owner": "Kai", "gate": "saline", "notes": "v2: compare the mean of 3 left and 3 right readout electrodes, each divided by its own baseline rate (floor 0.1 Hz), random tie-break logged. Mirrored mapping in half the dishes. Graded push strength held back for later.", "src": "Encoding v2 section 4", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "c-decoder", "parent": "dec", "title": "Get the decoder reading electrode positions instead of channel numbers", "kind": "build", "status": "todo", "owner": "Kai", "gate": "saline", "notes": "", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["d-decoder", "c-chanmap"], "options": [], "chosen": null, "done": "choose_action takes left and right electrode lists from the layout, normalizes rates, logs ties, and a test shows a stimulated electrode is never a readout electrode.", "needs": [{"t": "Channel map", "ok": false}, {"t": "Readout zones from the layout decision", "ok": false}, {"t": "Per-electrode baseline rates from the spontaneous recording", "ok": false}, {"t": "Random tie-break (Baseline code)", "ok": true}], "bugs": ["Split by channel index 0-29 vs 30-59 (feedback.py:10-11)", "No rate normalization between halves (P16)", "In every path the stimulated half is also a decode half, so the loop is a reflex (P19)", "Legacy paths send every tie right (mea_integeration.py:293, Brian2-Path/brian_simulator.py:124)"], "files": ["Baseline-Protocol/Hardware/feedback.py (choose_action)", "Project-Documentation/Pipeline-Review.md (P15, P16, P19)"]}, {"id": "env", "parent": "loop", "title": "2E. Environment update and timing", "kind": "area", "status": "todo", "owner": "Kai, Ryan", "gate": "", "notes": "", "src": "", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": [], "spec": "CartPole, one step per cycle"}, {"id": "d-timing", "parent": "env", "title": "Cycle timing: one game step per 200 ms, game waits for the culture", "kind": "decision", "status": "proposed", "owner": "Kai", "gate": "saline", "notes": "Current Baseline window is 100 ms. At real-time speed most decisions get no pulse. 8 s fixed gap between episodes. The overview figure shows 100 ms.", "src": "Encoding v2 section 5", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "c-latency", "parent": "env", "title": "Get closed-loop latency measured on the rig", "kind": "test", "status": "build", "owner": "Ryan", "gate": "rig", "notes": "", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["c-record"], "options": [], "chosen": null, "done": "latency_pythonnet.csv and latency_csharp.csv are committed with callback interval and stimulation-to-artifact round trip, compared with a 20 ms budget.", "needs": [{"t": "Latency scripts written for pythonnet and C# (two branches)", "ok": true}, {"t": "Marshalling benchmark: 59.5 ms element by element vs 7.6 ms with Marshal.Copy", "ok": true}, {"t": "pythonnet ref-parameter behavior for ReadFramesI32 settled", "ok": false}, {"t": "Run both on the rig", "ok": false}], "bugs": ["latency_test.py:229-231 copies the frames_ret pattern, so its record and round-trip phases may see no data"], "files": ["Latency-Tests/pythonnet/latency_test.py (latency-pythonnet)", "Latency-Tests/csharp/LatencyTest.cs (latency-csharp)"]}, {"id": "fb", "parent": "loop", "title": "2F. Feedback (structured / unstructured)", "kind": "area", "status": "todo", "owner": "Saachi, Kai", "gate": "", "notes": "Team term: structured / unstructured feedback, not reward / punishment (Alon and Feldman).", "src": "", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": [], "spec": "decided after each episode"}, {"id": "fb-paradigm", "parent": "fb", "title": "Feedback design: which paradigm, success bar and timing?", "kind": "decision", "status": "proposed", "owner": "Saachi", "gate": "saline", "notes": "Competing proposals: (a) v2 DishBrain-style structured vs unstructured, bar = rank against the last 20 episodes; (b) Saachi: no stimulation while the pole is up, 5-pulse 100 Hz burst on failure; (c) Saachi: Robbins adaptive training pairs. Also decide the success bar (rank vs last 20, or 85th percentile of baseline) and when structured feedback fires (milestone while the pole is up, or end of episode). Each extra arm needs 8+ more cultures.", "src": "Encoding v2; Reward signaling doc", "deps": ["q-arms"], "options": ["DishBrain structured vs unstructured (v2)", "Rest on success, burst on failure", "Robbins adaptive training pairs"], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "c-feedback", "parent": "fb", "title": "Get feedback separated from sensory input, on its own generator", "kind": "build", "status": "todo", "owner": "Saachi, Kai", "gate": "saline", "notes": "", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["fb-paradigm", "c-stim", "c-laptop"], "options": [], "chosen": null, "done": "In a fake-device run, feedback fires only per the chosen rule, on generator 2, never during an encoding window, and every feedback event is logged.", "needs": [{"t": "Paradigm chosen", "ok": false}, {"t": "Feedback on its own generator and time window", "ok": false}, {"t": "Episode-level rule (end of episode or milestone)", "ok": false}, {"t": "Game pause during milestone feedback, if used", "ok": false}, {"t": "Feedback events in the session log", "ok": false}], "bugs": ["Sensory input and feedback are the same pulses in the Baseline code", "No end-of-episode feedback (P20)", "Legacy punishment threshold 0.262 rad never fires because episodes end at 0.2095 (mea_integeration.py:303; Brian2-Path too)"], "files": ["Baseline-Protocol/Hardware/feedback.py", "Baseline-Protocol/Hardware/mea_device.py:166-185", "Project-Documentation/Experiment-Design-Notes.md (sections 1-2)"]}, {"id": "log", "parent": "loop", "title": "2G. Logging (runs the whole time)", "kind": "area", "status": "todo", "owner": "Kai, Ryan", "gate": "", "notes": "", "src": "", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": [], "spec": "raw voltage, pulses, spikes, actions"}, {"id": "c-logging", "parent": "log", "title": "Get session logging working", "kind": "build", "status": "build", "owner": "Kai, Ryan", "gate": "saline", "notes": "", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["c-laptop"], "options": [], "chosen": null, "done": "A fake-device run writes a per-step CSV (angle, velocity, feedback type, electrode, pulse times, left/right counts, tie, action), a per-session JSON, and raw voltage that loads with the Saline loader.", "needs": [{"t": "Raw recorder exists in the Saline kit (.bin int32 + .json)", "ok": true}, {"t": "session_logger.py with a documented schema (missing)", "ok": false}, {"t": "Raw saving in the game loop", "ok": false}, {"t": "Whole-dish firing rate per minute (homeostasis)", "ok": false}, {"t": "Stimulation dose per electrode per episode", "ok": false}], "bugs": ["No per-step log in any game path; Baseline saves only episode lengths (run_hardware.py:57)"], "files": ["Saline-Test/mea_kit/hardware/recorder.py", "Saline-Test/mea_kit/common/recording.py", "Project-Documentation/Round-1-Tasks/T7-logging-and-analysis.md"]}, {"id": "prep-blocks", "parent": "loop", "title": "Training session structure: block and rest lengths", "kind": "decision", "status": "proposed", "owner": "Kai", "gate": "culture", "notes": "Proposal: 3 x 15 min training blocks with 15 min rests, then a post-session spontaneous recording. Robbins used 15 min blocks with 45 min rests.", "src": "Encoding v2 section 8", "deps": [], "options": ["3 x 15 min, 15 min rests", "15 min blocks, 45 min rests (Robbins)"], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "ctl", "parent": "root", "title": "Part 3. Independent experimental controls", "kind": "area", "status": "todo", "owner": "Skylar, Pranaya", "gate": "", "notes": "Run separately from the main game. Saline (3C) runs first because it sets blanking and spike thresholds. Rules: the culture is the unit, 8+ cultures per arm, identical code across arms, raw logs kept. None of 3A, 3B or 3D exists in code yet.", "src": "", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": [], "spec": "saline first, then yoked, physics, silent"}, {"id": "p3c", "parent": "ctl", "title": "3C. No-cell game (saline only)", "kind": "area", "status": "todo", "owner": "Abbas, Pranaya", "gate": "", "notes": "", "src": "", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "c-saline", "parent": "p3c", "title": "Get the saline run done and reported", "kind": "test", "status": "build", "owner": "Abbas, Pranaya", "gate": "saline", "notes": "", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["c-record", "c-stim"], "options": [], "chosen": null, "done": "The saline protocol has run on the rig, report.md is committed, the blind window per channel is known, and the game on saline averages about 22 steps (chance).", "needs": [{"t": "Saline kit: protocol, fake device, benchmark, 22 tests (20 pass, 2 skipped without salpa)", "ok": true}, {"t": "Kit's connect() fixed (same bug as recording)", "ok": false}, {"t": "Stimulator Connect status checked in the kit", "ok": false}, {"t": "Runs without salpa", "ok": false}, {"t": "Run on the rig", "ok": false}, {"t": "Benchmark report committed (not raw data)", "ok": false}], "bugs": ["device_mcs.py:111-117 copies the AddBlocksAndChannels bug (P1)", "stg.Connect status unchecked (device_mcs.py:84-85)", "README says 22 tests pass; without salpa it is 20 pass, 2 skipped"], "files": ["Saline-Test/README.md", "Saline-Test/TOMORROW_TEST_LIST.md", "Saline-Test/mea_kit/hardware/saline_protocol.py"]}, {"id": "p3a", "parent": "ctl", "title": "3A. Yoked stimulation (game-independent)", "kind": "area", "status": "todo", "owner": "Skylar", "gate": "", "notes": "", "src": "", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "ctl-gis", "parent": "p3a", "title": "What does the yoked control shuffle?", "kind": "decision", "status": "proposed", "owner": "Skylar", "gate": "pub", "notes": "Controls plan and the overview figure: replay a time-shuffled copy of the whole log. Encoding v2: shuffle only feedback times and keep encoding live, otherwise the dish plays blind and lands at chance by construction, so the control cannot fail. Feldman: same stimulus, same count, random timing.", "src": "Controls docs; Encoding v2; Feldman notes", "deps": [], "options": ["Replay the whole log", "Shuffle feedback only, encoding stays live"], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "c-yoked", "parent": "p3a", "title": "Build the yoked replay mode", "kind": "build", "status": "todo", "owner": "Skylar", "gate": "pub", "notes": "", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["ctl-gis", "c-logging"], "options": [], "chosen": null, "done": "A fake-device replay reproduces the logged pulse times on the 20 us grid while ignoring the pole.", "needs": [{"t": "Session log with every pulse", "ok": false}, {"t": "Replay that matches amplitudes, not just counts", "ok": false}, {"t": "Mode switch in config", "ok": false}], "bugs": [], "files": ["Saline-Test/mea_kit/hardware/saline_protocol.py:32-35 (commands.csv, a schedule that could be replayed)"]}, {"id": "p3b", "parent": "ctl", "title": "3B. Changed physics", "kind": "area", "status": "todo", "owner": "Skylar", "gate": "", "notes": "", "src": "", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "c-physics", "parent": "p3b", "title": "Build the changed-physics mode with a sham switch", "kind": "build", "status": "todo", "owner": "Skylar", "gate": "pub", "notes": "", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": [], "options": ["Left/right swap", "Gravity or pole length change"], "chosen": null, "done": "A unit test shows gravity, pole length or force flip as configured after N steps, and a sham switch logs a change without changing anything.", "needs": [{"t": "Which change to use (options below)", "ok": false}, {"t": "Configurable physics in the game loop", "ok": false}, {"t": "Sham switch", "ok": false}, {"t": "Run only on dishes already above chance", "ok": false}], "bugs": ["Every path uses gym.make('CartPole-v1') defaults; no overrides exist"], "files": ["Baseline-Protocol/Hardware/run_hardware.py", "Project-Documentation/Experiment-Design-Notes.md (section 1.5)"]}, {"id": "p3d", "parent": "ctl", "title": "3D. Silent control (no stimulation)", "kind": "area", "status": "todo", "owner": "Pranaya, Skylar", "gate": "", "notes": "", "src": "", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "c-silent", "parent": "p3d", "title": "Build the silent-control mode", "kind": "build", "status": "todo", "owner": "Pranaya", "gate": "pub", "notes": "", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["c-logging", "c-laptop"], "options": [], "chosen": null, "done": "A fake run with stimulation off averages about 22 steps, the log marks mode=silent, and a test confirms no stimulation commands are sent.", "needs": [{"t": "Mode switch in config", "ok": false}, {"t": "Decide which DishBrain-style variants to run (silent, sensory-only, rest)", "ok": false}, {"t": "Session logging", "ok": false}], "bugs": ["No closed-loop mode with stimulation off exists"], "files": ["Project-Documentation/Pipeline-Review.md (P18)", "Project-Documentation/Experiment-Design-Notes.md (section 3)"]}, {"id": "d-othercontrols", "parent": "ctl", "title": "Which other controls make the first cohort?", "kind": "decision", "status": "proposed", "owner": "Skylar, Pranaya", "gate": "pub", "notes": "Candidates: mirrored mapping in half the dishes (tests geometry), random-configuration control (only if map-selected roles), retention after rest (needs a separate cohort). Each extra arm is 8+ cultures.", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["q-arms"], "options": ["Mirrored mapping only", "Mirrored mapping + random configuration", "All three"], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "infra", "parent": "root", "title": "Infrastructure", "kind": "area", "status": "todo", "owner": "Ryan", "gate": "", "notes": "", "src": "", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": [], "spec": "laptop testing, repo, config"}, {"id": "c-laptop", "parent": "infra", "title": "Get the loop running on a laptop with a fake device", "kind": "build", "status": "todo", "owner": "", "gate": "rig", "notes": "Good first chunk for anyone: no rig needed, and every other chunk gets tested through it.", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": [], "options": [], "chosen": null, "done": "python run_hardware.py --fake runs 20 episodes on a Mac (about 22 steps with no artifacts), and pytest passes for spike counting, pulse trains and the decoder with the DLL stubbed.", "needs": [{"t": "FakeMEADevice adapted from Saline-Test/mea_kit/hardware/device_fake.py", "ok": false}, {"t": "--fake flag in run_hardware.py", "ok": false}, {"t": "Pytest suite with DLL stubs (pattern in offline_checks.py:26-40)", "ok": false}, {"t": "Pinned requirements (pythonnet 2 vs 3 differ)", "ok": false}], "bugs": ["No test suite, config.py or CI for the game code", "requirements.txt is unpinned"], "files": ["Saline-Test/mea_kit/hardware/device_fake.py", "Project-Documentation/Evidence/offline_checks.py", "Baseline-Protocol/Hardware/run_hardware.py"]}, {"id": "c-repo", "parent": "infra", "title": "Get the repo down to one active path with honest docs", "kind": "build", "status": "todo", "owner": "Ryan, Kai", "gate": "rig", "notes": "", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["d-path"], "options": [], "chosen": null, "done": "Legacy code is in archive/, open branches are merged or closed, READMEs describe only what exists, and one McsUsbNet.dll is used.", "needs": [{"t": "Code path decision", "ok": false}, {"t": "Merge or close PR #1 (docs) and PR #2 (latency-pythonnet)", "ok": false}, {"t": "PRs for fix-hardware-path-bugs, latency-csharp and Abbas-changes", "ok": false}, {"t": "Commit the v2 encoder files (not found anywhere)", "ok": false}, {"t": "Restore or commit the deleted System-Overview.md", "ok": false}], "bugs": ["Two hardware paths treated as active by different people", "READMEs claim lateral inhibition, synaptic scaling and a noise burst that do not exist (Baseline-Protocol/README.md:89-97)", "Brian2-Path is broken (ModuleNotFoundError: square) and gets stuck at 9.4 steps"], "files": ["CLAUDE.md (kai/round-1-docs)", "README.md", "Baseline-Protocol/README.md"]}, {"id": "inf-braindance", "parent": "infra", "title": "BrainDance: write an MCS backend, or keep our own phase modules?", "kind": "decision", "status": "research", "owner": "Ryan", "gate": "later", "notes": "BrainDance supports MaxWell and Open Ephys only. The mapping code already follows its phase structure.", "src": "BrainDance assignment", "deps": [], "options": ["Write an MCSEnv backend", "Own modules with BrainDance's phase structure"], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "an", "parent": "root", "title": "Analysis and statistics", "kind": "area", "status": "todo", "owner": "Leads", "gate": "", "notes": "", "src": "", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": [], "spec": "culture is the unit, 8+ per arm"}, {"id": "d-analysis", "parent": "an", "title": "Analysis plan, written before training data exists", "kind": "decision", "status": "proposed", "owner": "Kai, Skylar", "gate": "culture", "notes": "Agreed: the culture is the sample, 8+ per arm. Proposed: primary metric is mean log episode length in the final third vs chance (about 22 steps) and vs the dish's own baseline; secondary is final third minus first third; bootstrap CIs and permutation tests; homeostasis tracked as whole-dish rate per minute. Reference levels from offline_checks.py: stuck 9.4, chance 22.7, reflex 29.5 to 42.7 steps.", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "c-report", "parent": "an", "title": "Build the session report", "kind": "build", "status": "todo", "owner": "", "gate": "saline", "notes": "", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["c-logging"], "options": [], "chosen": null, "done": "Running it on a fake-device session gives episode lengths against the reference levels, action balance, tie rate and side-follow rate, and flags stuck or artifact-driven play.", "needs": [{"t": "Session logging", "ok": false}, {"t": "Reference levels computed (offline_checks.py section 3)", "ok": true}, {"t": "Homeostasis plot (rate per minute per electrode)", "ok": false}], "bugs": [], "files": ["Project-Documentation/Evidence/offline_checks.py", "Saline-Test/mea_kit/saline_benchmark/report.py"]}, {"id": "q-arms", "parent": "an", "title": "How many experimental arms can we afford?", "kind": "question", "status": "todo", "owner": "Leads", "gate": "culture", "notes": "Every arm needs 8+ cultures. Depends on culture supply. Decides which feedback paradigms and controls run first.", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md)", "deps": ["q-culture"], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}, {"id": "wet", "parent": "root", "title": "Lab, cultures and outside input", "kind": "area", "status": "todo", "owner": "Leads", "gate": "", "notes": "Advisors for design reviews: Feldman, and Alon at Cortical Labs.", "src": "", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": [], "spec": "facts the code cannot answer"}, {"id": "q-lab", "parent": "wet", "title": "Rig facts from the lab", "kind": "question", "status": "todo", "owner": "Ryan, Kai", "gate": "rig", "notes": "", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md) section 7", "deps": [], "options": [], "chosen": null, "done": "", "needs": [{"t": "MEA type, orientation and reference electrode position", "ok": false}, {"t": "Which SCU port the headstage is on", "ok": false}, {"t": "Headstage filter settings", "ok": false}, {"t": "Python, pythonnet and gymnasium versions on the lab PC", "ok": false}, {"t": "Did the Oct 18, Oct 22 (saline) and Oct 25 test days run, and where is the data? Nothing is in the repo", "ok": false}], "bugs": [], "files": []}, {"id": "q-mcs", "parent": "wet", "title": "Questions for MCS support", "kind": "question", "status": "todo", "owner": "Ryan", "gate": "rig", "notes": "", "src": "Code audit 2026-10-26 (TRACKER_CODEBASE_MAP.md) section 7", "deps": [], "options": [], "chosen": null, "done": "", "needs": [{"t": "Units of PrepareAndSendData amplitudes: uV/nA or DAC steps", "ok": false}, {"t": "What CreateSideband(40, 800, 40) controls; is 800 us the blanking hold?", "ok": false}, {"t": "Does SetVoltageMode(channel) set one generator only, and what is the default?", "ok": false}, {"t": "What the amplifier protection switch does; is False safe?", "ok": false}, {"t": "Is opening the device twice (recording + stimulator) supported?", "ok": false}, {"t": "Which data stream carries the sideband on our setup", "ok": false}, {"t": "Safe amplitude and charge per phase for our electrodes", "ok": false}], "bugs": [], "files": []}, {"id": "q-culture", "parent": "wet", "title": "Culture supply and cell details", "kind": "question", "status": "todo", "owner": "Leads", "gate": "culture", "notes": "", "src": "Feldman meeting open items", "deps": [], "options": [], "chosen": null, "done": "", "needs": [{"t": "How many MEAs and cultures per month", "ok": false}, {"t": "Cell source, species, days in vitro, GABAergic fraction", "ok": false}, {"t": "Medium additives such as BDNF (the paired-organoid result needed it)", "ok": false}], "bugs": [], "files": []}, {"id": "wet-opto", "parent": "wet", "title": "Optogenetics feasibility", "kind": "question", "status": "todo", "owner": "Leads", "gate": "later", "notes": "Avoids electrical artifact but needs opsin-expressing cultures and a light rig.", "src": "Feldman meeting", "deps": [], "options": [], "chosen": null, "done": "", "needs": [], "bugs": [], "files": []}], "streams": [{"id": "s-encdec", "name": "Encoding and decoding", "people": "Kai", "links": [["enc", "encoder and layouts"], ["dec", "position-based decoder"], ["env", "cycle timing"], ["log", "session log schema"], ["prep", "channel map and calibration"]]}, {"id": "s-hw", "name": "Hardware pipeline", "people": "Ryan, Abbas", "links": [["stim", "stimulation verified on the rig, code path"], ["rec", "recording and aligned windows"], ["env", "latency on the rig"], ["infra", "repo cleanup"], ["ctl", "3C saline run"]]}, {"id": "s-ctl", "name": "Experimental controls", "people": "Skylar, Pranaya", "links": [["prep", "1A spike validation"], ["ctl", "3A yoked, 3B physics, 3C saline, 3D silent"], ["an", "statistics plan"]]}, {"id": "s-fb", "name": "Feedback signaling", "people": "Saachi", "links": [["fb", "feedback paradigm and separation from sensory input"], ["stim", "feedback on generator 2"]]}, {"id": "s-map", "name": "Network mapping", "people": "Syrine", "links": [["prep", "mapping pipeline and channel selection"], ["enc", "may choose the input electrodes"], ["dec", "may choose the readout zones"]]}, {"id": "s-bd", "name": "BrainDance API", "people": "Ryan", "links": [["infra", "MCS backend or our own phase modules"], ["prep", "phase structure for the setup steps"]]}]}</script>
+<script id="app-script">
+(function(){
+"use strict";
+var RESET = ":root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}";
+var FONT_LINK = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">';
+var PAGE_TITLE = "MEA-CartPole Design Tracker";
+
+var STATUSES = [
+  ["todo","Not started"],["research","In research"],["proposed","Proposal ready"],["decided","Decided"],
+  ["build","In progress"],["verified","Verified"],["blocked","Blocked"]];
+var KINDS = [["area","Group"],["decision","Decision"],["build","Work chunk"],["test","Test run"],["question","Open question"]];
+var GATES = [["","No milestone"],["rig","Rig works"],["saline","Loop on saline"],["culture","First culture"],["pub","Full cohort"],["later","Later"]];
+var GATE_ORDER = {rig:1,saline:2,culture:3,pub:4,later:5};
+var LOOP_IDS = ["enc","stim","rec","dec","env","fb","log"];
+var OTHER_IDS = ["prep","ctl","infra","an","wet"];
+var LS_KEY = "mea-tracker-ui-v2", PENDING_KEY = "mea-tracker-pending-v1";
+
+function splitCode(title){ var m=String(title||"").match(/^([0-9][A-Z]?)\.\s+(.*)$/); return m?[m[1],m[2]]:["",title]; }
+function lab(list,v){for(var i=0;i<list.length;i++){if(list[i][0]===v)return list[i][1];}return v||"";}
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+
+var DATA = JSON.parse(document.getElementById("tracker-data").textContent);
+var ORIGINAL = JSON.parse(JSON.stringify(DATA.nodes));
+var nodes = DATA.nodes;
+var byId, kids;
+function index(){
+  byId = {}; kids = {};
+  nodes.forEach(function(n){byId[n.id]=n; kids[n.id]=[];});
+  nodes.forEach(function(n){ if(n.parent && kids[n.parent]) kids[n.parent].push(n.id); });
+}
+index();
+
+/* per-viewer UI state */
+var ui = {open:{}, sel:null, q:"", kind:"", status:"", gate:"", owner:"", due:"", review:false, sync:false};
+try{ var saved = JSON.parse(localStorage.getItem(LS_KEY)||"null"); if(saved&&saved.open) ui.open = saved.open; }catch(e){}
+if(!Object.keys(ui.open).length){ ui.open = {root:true, prep:true, loop:true, ctl:true}; }
+function saveUI(){ try{ localStorage.setItem(LS_KEY, JSON.stringify({open:ui.open})); }catch(e){} }
+
+var dirty = false, canWrite = null, artifactNS = null, saving = false;
+
+/* ---------- GitHub Pages mode: data.json in the repo is the shared store ---------- */
+var ghMode = !(window.claude && typeof window.claude.use==="function") && /^https?:$/.test(location.protocol) &&
+  (/\.github\.io$/i.test(location.hostname) || /^(localhost|127\.0\.0\.1)$/.test(location.hostname) || /[?&]gh=1\b/.test(location.search) || (function(){ try{ return !!localStorage.getItem("mea-tracker-gh-v1"); }catch(e){ return false; } })());
+var GHK = "mea-tracker-gh-v1";
+var gh = {repo:"", branch:"main", path:"data.json", token:"", sha:null};
+(function(){
+  try{ var c=JSON.parse(localStorage.getItem(GHK)||"null"); if(c){ gh.repo=c.repo||""; gh.branch=c.branch||"main"; gh.token=c.token||""; } }catch(e){}
+  if(!gh.repo){ var m=location.hostname.match(/^([^.]+)\.github\.io$/i), seg=location.pathname.split("/")[1]; if(m){ gh.repo = m[1]+"/"+(seg||(m[1]+".github.io")); } }
+})();
+function ghStore(){ try{ localStorage.setItem(GHK, JSON.stringify({repo:gh.repo,branch:gh.branch,token:gh.token})); }catch(e){} }
+function ghDecode(res){
+  var bin = atob(String(res.content||"").replace(/\s/g,"")); var bytes = new Uint8Array(bin.length);
+  for(var i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  return JSON.parse(new TextDecoder("utf-8").decode(bytes));
+}
+function ghEncode(str){
+  var bytes = new TextEncoder().encode(str), bin="";
+  for(var i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+function ghApi(method, body){
+  var url = "https://api.github.com/repos/"+gh.repo+"/contents/"+gh.path+(method==="GET"? "?ref="+encodeURIComponent(gh.branch)+"&t="+Date.now() : "");
+  var headers = {"Accept":"application/vnd.github+json"}; if(gh.token) headers.Authorization = "Bearer "+gh.token;
+  if(body) headers["Content-Type"]="application/json";
+  return fetch(url,{method:method,headers:headers,body:body?JSON.stringify(body):undefined}).then(function(r){
+    return r.json().catch(function(){return {};}).then(function(j){ if(!r.ok){ var e=new Error(j.message||("HTTP "+r.status)); e.status=r.status; throw e; } return j; });
+  });
+}
+function setNodes(list){
+  nodes.length=0; list.forEach(function(x){nodes.push(x);});
+  ORIGINAL = JSON.parse(JSON.stringify(nodes)); index();
+  if(ui.sel && !byId[ui.sel]) ui.sel=null;
+}
+function ghRefresh(quiet){
+  if(!ghMode || dirty || saving) return Promise.resolve();
+  var viaApi = gh.repo ? ghApi("GET").then(function(res){ return {sha:res.sha, doc:ghDecode(res)}; }) : Promise.reject(new Error("no repo"));
+  return viaApi.catch(function(){
+    return fetch("data.json?t="+Date.now()).then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); }).then(function(doc){ return {sha:null, doc:doc}; });
+  }).then(function(r){
+    gh.sha = r.sha;
+    if(dirty || !r.doc || !Array.isArray(r.doc.nodes)) return;
+    var ns = r.doc.streams || STREAMS_ORIG;
+    var chN = JSON.stringify(r.doc.nodes)!==JSON.stringify(ORIGINAL), chS = JSON.stringify(ns)!==JSON.stringify(STREAMS_ORIG);
+    if(chN || chS){ STREAMS=JSON.parse(JSON.stringify(ns)); STREAMS_ORIG=JSON.parse(JSON.stringify(ns)); if(ui.stream&&!curStream()) ui.stream=null; setNodes(r.doc.nodes); renderAll(); if(!quiet) toast("Loaded the latest version."); }
+  }).catch(function(){ if(!quiet) toast("Could not reach the latest data. Showing the copy bundled with this page."); });
+}
+function ghDoc(list, streams){ return JSON.stringify({schema:2, saved:todayISO(), nodes:list, streams:streams}, null, 1)+"\n"; }
+function ghSave(){
+  if(saving) return;
+  if(!gh.token || !gh.repo){ ui.sync=true; renderSync(); toast("Connect GitHub first."); return; }
+  saving=true; renderSavebar();
+  var mine = diff(ORIGINAL, nodes), attempt=0;
+  var myStreams = JSON.stringify(STREAMS)!==JSON.stringify(STREAMS_ORIG) ? JSON.parse(JSON.stringify(STREAMS)) : null;
+  function once(){
+    return ghApi("GET").then(function(remote){
+      var rdoc = ghDecode(remote), merged = applyPatch(rdoc.nodes, mine), st = myStreams || rdoc.streams || STREAMS;
+      return ghApi("PUT",{message:"Update design tracker", content:ghEncode(ghDoc(merged, st)), sha:remote.sha, branch:gh.branch}).then(function(res){ return {merged:merged, streams:st, sha:res.content&&res.content.sha}; });
+    }).catch(function(err){
+      if((err.status===409||err.status===422) && attempt++<2) return once();
+      throw err;
+    });
+  }
+  once().then(function(r){
+    saving=false; dirty=false; gh.sha=r.sha; STREAMS=r.streams; STREAMS_ORIG=JSON.parse(JSON.stringify(r.streams)); if(ui.stream&&!curStream()) ui.stream=null; setNodes(r.merged); renderAll();
+    toast("Saved to GitHub. Teammates see it on their next load.");
+  }).catch(function(err){
+    saving=false; renderSavebar();
+    if(err.status===401||err.status===403||err.status===404){ ui.sync=true; renderSync(); toast("GitHub refused the save. Check the token and that it can write to "+gh.repo+"."); }
+    else toast("Save failed ("+(err.message||"network")+"). Try again.");
+  });
+}
+function ghExport(){
+  var b=new Blob([ghDoc(nodes, STREAMS)],{type:"application/json"}), a=document.createElement("a");
+  a.href=URL.createObjectURL(b); a.download="data.json"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+}
+function renderSync(){
+  var btn=document.getElementById("b-sync"), el=document.getElementById("syncpanel"); if(!btn||!el) return;
+  if(!ghMode){ btn.hidden=true; el.innerHTML=""; return; }
+  btn.hidden=false; btn.textContent = gh.token? "GitHub: connected" : "Connect GitHub to save";
+  btn.setAttribute("aria-pressed", String(ui.sync));
+  if(!ui.sync){ el.innerHTML=""; return; }
+  el.innerHTML = '<div class="syncpanel">'+
+    '<p>Anyone can open this page and edit it. To <strong>save</strong> edits for the whole team, connect a GitHub token. Saving commits <code>data.json</code> in the repository, and everyone sees it on their next load. The token is stored in this browser only.</p>'+
+    '<p>Create it at GitHub, Settings, Developer settings, Fine-grained tokens. Give it access to this one repository with Contents set to Read and write. You must also be a collaborator on the repository.</p>'+
+    '<div class="grid2"><div class="field"><label for="gh-repo">Repository (owner/name)</label><input id="gh-repo" value="'+esc(gh.repo)+'" placeholder="your-username/mea-tracker"></div>'+
+    '<div class="field"><label for="gh-branch">Branch</label><input id="gh-branch" value="'+esc(gh.branch)+'"></div></div>'+
+    '<div class="field"><label for="gh-token">Token</label><input id="gh-token" type="password" autocomplete="off" value="'+esc(gh.token)+'" placeholder="github_pat_..."></div>'+
+    '<div class="row-btns"><button class="btn primary" data-act="gh-connect">Save connection</button>'+
+    (gh.token?'<button class="btn" data-act="gh-disconnect">Forget token</button>':'')+
+    '<button class="btn" data-act="export">Download data.json</button><button class="btn" data-act="sync">Close</button></div></div>';
+}
+
+/* ---------- deadlines ---------- */
+var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function pad2(x){ return (x<10?"0":"")+x; }
+function todayISO(){ var d=new Date(); return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate()); }
+function parseISO(s){ var m=/^(\d{4})-(\d\d)-(\d\d)$/.exec(s||""); return m? Date.UTC(+m[1],+m[2]-1,+m[3]) : null; }
+function fmtDate(s){ var m=/^(\d{4})-(\d\d)-(\d\d)$/.exec(s||""); return m? MON[+m[2]-1]+" "+(+m[3]) : ""; }
+function daysUntil(s){ var a=parseISO(s), b=parseISO(todayISO()); return a==null? null : Math.round((a-b)/864e5); }
+function dueState(n){
+  if(!n.deadline || parseISO(n.deadline)==null) return "";
+  var fin = n.kind==="area" ? (prog(n.id).total>0 && prog(n.id).pct===100) : isDone(n);
+  if(fin) return "done";
+  var d = daysUntil(n.deadline);
+  return d<0 ? "over" : d<=7 ? "soon" : "later";
+}
+function dueLabel(n){
+  var s = dueState(n), d = daysUntil(n.deadline);
+  if(s==="over") return "Overdue "+fmtDate(n.deadline);
+  if(s==="soon") return d===0? "Due today" : d===1? "Due tomorrow" : "Due "+fmtDate(n.deadline);
+  return fmtDate(n.deadline);
+}
+function dueCounts(){
+  var c={over:0,week:0,has:0};
+  nodes.forEach(function(n){ var s=dueState(n); if(n.deadline) c.has++; if(s==="over") c.over++; if(s==="over"||s==="soon") c.week++; });
+  return c;
+}
+function updateDueSelect(){
+  var el=document.getElementById("f-due"); if(!el) return; var c=dueCounts();
+  el.innerHTML = [["","Deadline: any"],["over","Overdue ("+c.over+")"],["week","Overdue or due in 7 days ("+c.week+")"],["has","Has a deadline ("+c.has+")"],["none","No deadline"]]
+    .map(function(o){return '<option value="'+o[0]+'"'+(o[0]===ui.due?" selected":"")+'>'+o[1]+'</option>';}).join("");
+}
+
+/* ---------- progress ---------- */
+function isItem(n){ return n.kind !== "area"; }
+function isDone(n){
+  if(n.kind==="decision"||n.kind==="question") return n.status==="decided"||n.status==="build"||n.status==="verified";
+  return n.status==="verified";
+}
+function subtree(id, out){ out = out||[]; (kids[id]||[]).forEach(function(c){ out.push(byId[c]); subtree(c,out); }); return out; }
+function prog(id){
+  var items = subtree(id).filter(isItem); var self = byId[id];
+  if(self && isItem(self)) items.push(self);
+  var d = items.filter(isDone).length;
+  return {done:d, total:items.length, pct: items.length? Math.round(100*d/items.length):0,
+    review: items.filter(function(n){return n.status==="proposed";}).length,
+    open: items.filter(function(n){return (n.kind==="decision"||n.kind==="question") && !isDone(n);}).length};
+}
+function gateProg(maxOrder){
+  var items = nodes.filter(function(n){ return isItem(n) && GATE_ORDER[n.gate] && GATE_ORDER[n.gate]<=maxOrder; });
+  var d = items.filter(isDone).length;
+  return {done:d,total:items.length,pct:items.length?Math.round(100*d/items.length):0};
+}
+
+/* ---------- filtering ---------- */
+function owners(){
+  var set = {};
+  nodes.forEach(function(n){ String(n.owner||"").split(",").forEach(function(o){ o=o.trim(); if(o) set[o]=1; }); });
+  return Object.keys(set).sort();
+}
+function filtersOn(){ return ui.q||ui.kind||ui.status||ui.gate||ui.owner||ui.due||ui.review; }
+function matches(n){
+  if(ui.review && n.status!=="proposed") return false;
+  if(ui.kind && n.kind!==ui.kind) return false;
+  if(ui.status && n.status!==ui.status) return false;
+  if(ui.gate && n.gate!==ui.gate) return false;
+  if(ui.due){ var ds = dueState(n);
+    if(ui.due==="over" && ds!=="over") return false;
+    if(ui.due==="week" && ds!=="over" && ds!=="soon") return false;
+    if(ui.due==="has" && !n.deadline) return false;
+    if(ui.due==="none" && (n.deadline || n.kind==="area")) return false; }
+  if(ui.owner && String(n.owner||"").split(",").map(function(s){return s.trim();}).indexOf(ui.owner)<0) return false;
+  if(ui.q){ var q = ui.q.toLowerCase(); var hay = (n.title+" "+n.notes+" "+n.owner+" "+n.src+" "+(n.done||"")+" "+(n.options||[]).join(" ")+" "+(n.needs||[]).map(function(x){return x.t;}).join(" ")+" "+(n.bugs||[]).join(" ")+" "+(n.files||[]).join(" ")).toLowerCase(); if(hay.indexOf(q)<0) return false; }
+  return true;
+}
+var visible = null;
+function computeVisible(){
+  if(!filtersOn()){ visible = null; return; }
+  visible = {};
+  nodes.forEach(function(n){ if(matches(n)){ visible[n.id]="hit"; var p=n.parent; while(p){ if(!visible[p]) visible[p]="path"; p=byId[p]?byId[p].parent:null; } } });
+}
+
+/* ---------- rendering ---------- */
+var app = document.getElementById("app");
+function shell(){
+  app.innerHTML =
+  '<div id="banner"></div>'+
+  '<header class="top"><div class="wrap">'+
+    '<div><div class="eyebrow">Neurotech@Berkeley &middot; MEA2100-Mini, 60 electrodes</div>'+
+    '<h1>Experiment Design Tracker</h1>'+
+    '<p class="lede">Each item is a chunk of the system to get working, a decision for the leads, or a question for the lab or MCS. Open a chunk to see what done looks like, what it needs, the bugs found in the code, and which files to start from. Work through the milestones in order.</p>'+
+    '<div class="gates" id="gates"></div></div>'+
+    '<div class="mea" id="mea"></div>'+
+  '</div></header>'+
+  '<section class="loop"><div class="wrap">'+
+    '<div class="sec-h"><h2>Part 2: one cycle of the main game</h2><p>Click a step to open its branch</p></div>'+
+    '<div class="strip" id="strip"></div><div class="return">back to 2A every cycle (200 ms proposed)</div>'+
+    '<div class="others" id="others"></div>'+
+  '</div></section>'+
+  '<main><div class="wrap">'+
+    '<div style="min-width:0">'+
+      '<div class="toolbar">'+
+        '<input type="search" id="f-q" placeholder="Search titles, notes, owners" aria-label="Search">'+
+        '<select id="f-kind" aria-label="Type"><option value="">All types</option>'+KINDS.filter(function(k){return k[0]!=="area";}).map(function(k){return '<option value="'+k[0]+'">'+k[1]+'</option>';}).join("")+'</select>'+
+        '<select id="f-status" aria-label="Status"><option value="">All statuses</option>'+STATUSES.map(function(s){return '<option value="'+s[0]+'">'+s[1]+'</option>';}).join("")+'</select>'+
+        '<select id="f-gate" aria-label="Milestone"><option value="">Milestone: any</option>'+GATES.filter(function(g){return g[0];}).map(function(g){return '<option value="'+g[0]+'">'+g[1]+'</option>';}).join("")+'</select>'+
+        '<select id="f-owner" aria-label="Owner"><option value="">All owners</option></select>'+
+        '<select id="f-due" aria-label="Deadline"></select>'+
+        '<button class="btn" id="f-review" aria-pressed="false">Waiting for leads</button>'+
+        '<button class="btn" id="b-expand">Expand all</button>'+
+        '<button class="btn" id="b-collapse">Collapse</button>'+
+        '<button class="btn" id="b-copy">Copy outline</button>'+
+        '<button class="btn" id="b-sync" hidden></button>'+
+      '</div>'+
+      '<div id="syncpanel"></div>'+
+      '<div class="legend">'+KINDS.map(function(k){return '<span><i class="g '+k[0]+'"></i>'+k[1]+'</span>';}).join("")+
+        '<span class="mono">Chips: owner &middot; milestone &middot; checklist</span></div>'+
+      '<div class="treebox" role="tree" id="tree"></div>'+
+    '</div>'+
+    '<aside class="insp closed" id="insp" aria-label="Item details"></aside>'+
+  '</div></main>'+
+  '<section class="cycle"><div class="wrap">'+
+    '<div class="sec-h"><h2>The full cycle, and who works where</h2><p>Click a step to open it in the tree above</p></div>'+
+    '<p class="cyc-lede">The ring is Part 2, the main game: solid arrows are the path a signal takes every cycle. Dashed boxes are Part 1 (pre-training), Part 3 (controls, run separately) and supporting work; hover one to see which steps it sets up, tests or feeds. Colored dots show which assignment works on each step. Select an assignment to isolate it.</p>'+
+    '<div class="streams" id="streams"></div>'+
+    '<div class="cyclebox" id="cyclebox"></div>'+
+    '<div class="cyc-key"><span><i></i>signal path, every cycle</span><span><i class="d" style="border-color:var(--st-proposed)"></i>feedback, after an episode</span><span><i class="d"></i>logging taps</span></div>'+
+    '<div id="cyc-detail"></div>'+
+  '</div></section>'+
+  '<div id="savebar"></div>';
+  bindToolbar();
+}
+
+function renderGates(){
+  updateDueSelect();
+  var s=gateProg(1), sa=gateProg(2), cu=gateProg(3), all=prog("root");
+  function g(lbl,p,sub,cls,gate){ return '<button class="gate '+(cls||"")+'" data-gatefilter="'+(gate||"")+'" aria-pressed="'+(ui.gate===gate)+'"><div class="lbl">'+lbl+'</div><div class="num">'+p.pct+'%</div><div class="sub">'+sub+'</div><div class="bar"><i style="width:'+p.pct+'%"></i></div></button>'; }
+  var rv = nodes.filter(function(n){return n.status==="proposed";}).length;
+  var rvP = {pct: rv};
+  document.getElementById("gates").innerHTML =
+    g("1 &middot; Rig works",s,s.done+" of "+s.total+" items done &middot; show them",null,"rig")+
+    g("2 &middot; Loop runs on saline",sa,sa.done+" of "+sa.total+" items done &middot; show them",null,"saline")+
+    g("3 &middot; First culture",cu,cu.done+" of "+cu.total+" items done &middot; show them",null,"culture")+
+    '<button class="gate review" data-gatefilter="review" aria-pressed="'+ui.review+'"><div class="lbl">Waiting for leads</div><div class="num">'+rv+'</div><div class="sub">proposals ready to decide &middot; show them</div><div class="bar"><i style="width:'+Math.min(100,Math.round(100*rv/Math.max(1,all.total)))+'%"></i></div></button>';
+}
+
+function renderMEA(){
+  var sz=14, gap=4, pad=2, w=8*sz+7*gap+pad*2, out=[];
+  for(var r=1;r<=8;r++){ for(var c=1;c<=8;c++){
+    if((r===1||r===8)&&(c===1||c===8)) continue;
+    var x=pad+(c-1)*(sz+gap)+sz/2, y=pad+(r-1)*(sz+gap)+sz/2, fill="var(--surface-2)", stroke="var(--line)";
+    if(r===8&&c>=2&&c<=7){fill="var(--accent)";stroke="var(--accent)";}
+    else if(r===1&&c>=2&&c<=7){fill="var(--st-proposed)";stroke="var(--st-proposed)";}
+    else if(c===1&&r===5){fill="var(--ink)";stroke="var(--ink)";}
+    out.push('<circle cx="'+x+'" cy="'+y+'" r="'+(sz/2-1.5)+'" fill="'+fill+'" stroke="'+stroke+'"><title>Electrode '+c+''+r+'</title></circle>');
+  }}
+  document.getElementById("mea").innerHTML='<svg width="'+w+'" height="'+w+'" viewBox="0 0 '+w+' '+w+'" role="img" aria-label="Proposed v2 electrode layout">'+out.join("")+'</svg>'+
+    '<div class="cap">v2 proposal (not decided)<br>row 1 output &middot; row 8 input<br>ref 15</div>';
+}
+
+function renderStrip(){
+  document.getElementById("strip").innerHTML = LOOP_IDS.map(function(id,i){
+    var n=byId[id]; if(!n) return ""; var p=prog(id);
+    var sc=splitCode(n.title); return '<button class="stage" data-jump="'+id+'"><span class="n">'+esc(sc[0]||("step "+(i+1)))+'</span><span class="t">'+esc(sc[1])+'</span><span class="s">'+esc(n.spec||"")+'</span>'+
+      '<span class="bar"><i style="width:'+p.pct+'%"></i></span><span class="m"><span>'+p.done+'/'+p.total+' done</span>'+(p.review?'<b>'+p.review+' to decide</b>':'')+'</span></button>';
+  }).join("");
+  document.getElementById("others").innerHTML = OTHER_IDS.map(function(id){
+    var n=byId[id]; if(!n) return ""; var p=prog(id);
+    return '<button class="other" data-jump="'+id+'"><span class="t">'+esc(n.title)+'</span><span class="bar"><i style="width:'+p.pct+'%"></i></span>'+
+      '<span class="m mono" style="font-size:11px;color:var(--ink-3)">'+p.done+'/'+p.total+' done'+(p.review?' &middot; <span style="color:var(--st-proposed)">'+p.review+' to decide</span>':'')+'</span></button>';
+  }).join("");
+}
+
+var CHEV = '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+function pill(st){ return '<span class="pill" style="--c:var(--st-'+st+')">'+esc(lab(STATUSES,st))+'</span>'; }
+function rowHTML(n,depth){
+  var ch = kids[n.id]||[]; var hasKids = ch.length>0;
+  var open = visible ? true : !!ui.open[n.id];
+  var cls = "row"+(n.kind==="area"?" area":"")+(depth===1?" top":"")+(ui.sel===n.id?" sel":"")+(visible&&visible[n.id]==="path"?" dim":"");
+  var meta = "";
+  if(n.owner) meta += '<span class="chip">'+esc(n.owner)+'</span>';
+  if(n.gate) meta += '<span class="chip">'+esc(lab(GATES,n.gate))+'</span>';
+  if(n.deadline && dueState(n)) meta += '<span class="chip due '+dueState(n)+'" title="Deadline '+esc(n.deadline)+'">'+esc(dueLabel(n))+'</span>';
+  if(n.kind==="area"){ var p=prog(n.id); meta += '<span class="prog"><span class="bar"><i style="width:'+p.pct+'%"></i></span>'+p.done+'/'+p.total+'</span>'; }
+  else { if((n.needs||[]).length){ var ok=n.needs.filter(function(x){return x.ok;}).length; meta += '<span class="chip need'+(ok===n.needs.length?' full':'')+'" title="Checklist items in place">'+ok+'/'+n.needs.length+'</span>'; } meta += pill(n.status); }
+  var h = '<li role="treeitem" aria-expanded="'+(hasKids?String(open):"false")+'"><div class="'+cls+'" data-id="'+n.id+'">'+
+    (hasKids?'<button class="chev" data-tog="'+n.id+'" aria-expanded="'+open+'" aria-label="'+(open?"Collapse":"Expand")+'">'+CHEV+'</button>':'<span></span>')+
+    '<i class="g '+n.kind+'" title="'+esc(lab(KINDS,n.kind))+'"></i><span class="ttl">'+esc(n.title)+'</span><span class="meta">'+meta+'</span></div>';
+  if(hasKids && open){
+    var inner = ch.map(function(c){ var cn=byId[c]; if(visible && !visible[c]) return ""; return rowHTML(cn,depth+1); }).join("");
+    h += '<ul role="group">'+inner+'</ul>';
+  }
+  return h+'</li>';
+}
+function renderTree(){
+  computeVisible();
+  var roots = nodes.filter(function(n){return !n.parent;});
+  var html = roots.map(function(r){ if(visible && !visible[r.id]) return ""; return rowHTML(r,0); }).join("");
+  document.getElementById("tree").innerHTML = html ? '<ul class="tree">'+html+'</ul>' : '<div class="empty">Nothing matches these filters.</div>';
+}
+
+function autosize(ta){ ta.style.height="auto"; ta.style.height=Math.min(420, ta.scrollHeight+2)+"px"; }
+function pathOf(id){ var p=[], n=byId[id]; while(n){ p.unshift(n); n=n.parent?byId[n.parent]:null; } return p; }
+function ro(){ return canWrite===false; }
+function renderInsp(){
+  var el = document.getElementById("insp");
+  var n = ui.sel && byId[ui.sel];
+  if(!n){
+    el.innerHTML='<div class="empty">Select an item in the tree to see its notes, options and dependencies, and to edit it.</div>';
+    if(window.matchMedia("(max-width:900px)").matches) el.classList.add("closed"); else el.classList.remove("closed");
+    return;
+  }
+  el.classList.remove("closed");
+  var dis = ro()?" disabled":"";
+  var crumb = pathOf(n.id).slice(1,-1).map(function(p){return esc(p.title);}).join(" / ") || "Top level";
+  var blocks = nodes.filter(function(m){return (m.deps||[]).indexOf(n.id)>=0;});
+  var doneTxt = n.kind==="area" ? (function(){var p=prog(n.id); return p.done+" of "+p.total+" items done, "+p.review+" waiting for leads";})() :
+    (isDone(n)?"Counts as done":"Counts as done at "+((n.kind==="decision"||n.kind==="question")?"Decided":"Verified"));
+  var h = '<div class="insp-h"><span class="crumb">'+crumb+'</span><button class="btn x" data-act="close" aria-label="Close details">Close</button></div><div class="insp-b">';
+  if(ro()) h += '<div class="ro-note">View only. Ask Kai for edit access to change items.</div>';
+  h += '<div class="field"><label for="e-title">Title</label><input id="e-title" class="title-in" value="'+esc(n.title)+'"'+dis+'></div>';
+  h += '<div class="grid2">';
+  if(n.kind!=="area") h += '<div class="field"><label for="e-status">Status</label><select id="e-status"'+dis+'>'+STATUSES.map(function(s){return '<option value="'+s[0]+'"'+(s[0]===n.status?" selected":"")+'>'+s[1]+'</option>';}).join("")+'</select></div>';
+  else h += '<div class="field"><span class="lab">Progress</span><span class="donechip">'+doneTxt+'</span></div>';
+  h += '<div class="field"><label for="e-gate">Milestone</label><select id="e-gate"'+dis+'>'+GATES.map(function(g){return '<option value="'+g[0]+'"'+(g[0]===(n.gate||"")?" selected":"")+'>'+g[1]+'</option>';}).join("")+'</select></div></div>';
+  h += '<div class="grid2"><div class="field"><label for="e-owner">Owner</label><input id="e-owner" list="owner-list" value="'+esc(n.owner)+'" placeholder="Name, name"'+dis+'><datalist id="owner-list">'+owners().map(function(o){return '<option value="'+esc(o)+'">';}).join("")+'</datalist></div>'+
+    '<div class="field"><label for="e-deadline">Deadline</label><input type="date" id="e-deadline" value="'+esc(n.deadline||"")+'"'+dis+'>'+
+    (function(){ var s=dueState(n); if(!s) return ''; if(s==="done") return '<div class="dueline">Done, no longer due</div>'; var d=daysUntil(n.deadline); return '<div class="dueline '+s+'">'+(d<0?(-d)+' day'+(d===-1?'':'s')+' overdue':d===0?'Due today':d+' day'+(d===1?'':'s')+' left')+'</div>'; })()+
+    '</div></div>';
+  if(n.kind!=="area") h += '<div class="donechip">'+doneTxt+'</div>';
+  var chunk = n.kind==="build"||n.kind==="test";
+  if(chunk || n.done) h += '<div class="field sect"><label for="e-done">Done when</label><textarea id="e-done" class="auto short" rows="2"'+dis+'>'+esc(n.done||"")+'</textarea></div>';
+  function listSect(key,label,hint,cls){
+    var arr = n[key]||[]; if(!chunk && n.kind!=="question" && !arr.length) return "";
+    var s = '<div class="field sect"><span class="lab">'+label+(key==="needs"&&arr.length?' &middot; '+arr.filter(function(x){return x.ok;}).length+' of '+arr.length+' in place':'')+'</span>';
+    if(hint && !arr.length) s += '<span class="donechip">'+hint+'</span>';
+    s += '<div class="lst '+cls+'">';
+    arr.forEach(function(x,i){
+      var txt = key==="needs"? x.t : x;
+      s += '<div class="li">'+(key==="needs"?'<input type="checkbox" data-need-ok="'+i+'"'+(x.ok?" checked":"")+dis+' aria-label="In place">':'<span class="bul" aria-hidden="true"></span>')+
+        '<textarea class="auto" rows="1" data-list="'+key+'" data-i="'+i+'"'+dis+' aria-label="'+label+' item '+(i+1)+'">'+esc(txt)+'</textarea>'+
+        (ro()?'':'<button class="btn xs" data-act="dellist" data-key="'+key+'" data-i="'+i+'" aria-label="Remove">&times;</button>')+'</div>';
+    });
+    if(!ro()) s += '<button class="btn xs add" data-act="addlist" data-key="'+key+'">Add</button>';
+    return s+'</div></div>';
+  }
+  if(n.kind==="decision"||(n.options&&n.options.length)){
+    h += '<div class="field sect"><span class="lab">Options (select the chosen one)</span><div class="opts">';
+    (n.options||[]).forEach(function(o,i){
+      h += '<div class="opt"><input type="radio" name="e-chosen" id="e-ch-'+i+'" data-chosen="'+i+'"'+(n.chosen===i?" checked":"")+dis+' aria-label="Choose option '+(i+1)+'">'+
+           '<input id="e-opt-'+i+'" data-opt="'+i+'" value="'+esc(o)+'"'+dis+'>'+
+           (ro()?'':'<button class="btn" data-act="delopt" data-i="'+i+'" aria-label="Remove option">&times;</button>')+'</div>';
+    });
+    if(!ro()) h += '<div style="display:flex;gap:6px"><button class="btn" data-act="addopt">Add option</button>'+(n.chosen!=null?'<button class="btn" data-act="clearchosen">Clear choice</button>':'')+'</div>';
+    h += '</div></div>';
+  }
+  h += listSect("needs", n.kind==="question"?"What we need to find out":"What it needs to work", "Nothing listed yet.", "needs");
+  h += listSect("bugs", "Known bugs in the code", "None found yet.", "bugs");
+  h += listSect("files", "Start here in the code", "No files listed yet.", "files");
+  h += '<div class="field"><label for="e-notes">Notes</label><textarea id="e-notes" class="auto"'+dis+'>'+esc(n.notes)+'</textarea></div>';
+  h += '<div class="grid2"><div class="field"><label for="e-kind">Type</label><select id="e-kind"'+dis+'>'+KINDS.map(function(k){return '<option value="'+k[0]+'"'+(k[0]===n.kind?" selected":"")+'>'+k[1]+'</option>';}).join("")+'</select></div>'+
+    '<div class="field"><label for="e-src">Source</label><input id="e-src" value="'+esc(n.src)+'" placeholder="Which doc or meeting"'+dis+'></div></div>';
+  h += '<div class="field"><span class="lab">Depends on</span><div class="depchips">'+
+    ((n.deps||[]).length? n.deps.map(function(d){ var m=byId[d]; if(!m) return ""; return '<span class="dep"><button class="go" data-go="'+d+'">'+esc(m.title)+'</button>'+(ro()?'':'<button data-act="deldep" data-d="'+d+'" aria-label="Remove dependency">&times;</button>')+'</span>'; }).join("") : '<span class="donechip">None</span>')+
+    '</div>';
+  if(!ro()){
+    h += '<select id="e-adddep" aria-label="Add dependency"><option value="">Add a dependency...</option>'+
+      nodes.filter(function(m){return m.id!==n.id && m.kind!=="area" && (n.deps||[]).indexOf(m.id)<0;}).map(function(m){return '<option value="'+m.id+'">'+esc(m.title.length>70?m.title.slice(0,68)+"...":m.title)+'</option>';}).join("")+'</select>';
+  }
+  h += '</div>';
+  if(blocks.length) h += '<div class="field"><span class="lab">Needed by these items</span><div class="depchips">'+blocks.map(function(m){return '<span class="dep"><button class="go" data-go="'+m.id+'">'+esc(m.title)+'</button></span>';}).join("")+'</div></div>';
+  if(!ro()){
+    h += '<div class="actions"><button class="btn" data-act="addchild">Add child</button><button class="btn" data-act="addsib">Add item below</button>'+
+      '<button class="btn" data-act="up" aria-label="Move up">Move up</button><button class="btn" data-act="down" aria-label="Move down">Move down</button>'+
+      (n.parent?'<button class="btn danger" data-act="del">Delete</button>':'')+'</div>';
+  }
+  h += '</div>';
+  el.innerHTML = h;
+  el.querySelectorAll("textarea.auto").forEach(autosize);
+}
+
+function renderSavebar(){
+  var el = document.getElementById("savebar");
+  if(!dirty){ el.innerHTML=""; return; }
+  var msg;
+  if(ghMode) msg = gh.token ? "Unsaved changes. Saving commits data.json to "+gh.repo+" for the whole team." : "Unsaved changes, on this screen only. Connect GitHub to save them for the team.";
+  else if(artifactNS===null && canWrite!==true) msg = "You have unsaved changes. Saving is not available in this view; copy the outline to keep them.";
+  else if(canWrite===false) msg = "This view is read-only. Changes stay on this screen only.";
+  else msg = "Unsaved changes. Saving publishes a new version for the whole team.";
+  el.innerHTML = '<div class="savebar"><div class="wrap"><span class="msg">'+msg+'</span>'+
+    '<button class="btn" data-act="discard">Discard</button>'+
+    (ghMode ? (gh.token ? '<button class="btn primary" data-act="save"'+(saving?" disabled":"")+'>'+(saving?"Saving...":"Save for team")+'</button>' : '<button class="btn primary" data-act="sync">Connect GitHub</button>') :
+     (canWrite!==false && artifactNS ? '<button class="btn primary" data-act="save"'+(saving?" disabled":"")+'>'+(saving?"Saving...":"Save for team")+'</button>':''))+
+    '</div></div>';
+}
+
+/* ---------- full-cycle diagram ---------- */
+var STREAMS = DATA.streams || [];
+var STREAMS_ORIG = JSON.parse(JSON.stringify(STREAMS));
+var STEP_IDS = LOOP_IDS.concat(OTHER_IDS);
+var armedSt = null, stTimer = null;
+function curStream(){ return STREAMS.filter(function(x){return x.id===ui.stream;})[0]; }
+function streamsTouched(full){ dirty=true; renderSavebar(); if(full){ renderCycle(); return; } clearTimeout(stTimer); stTimer=setTimeout(renderCycle,160); }
+var SHORT = {enc:"State + encoding",stim:"Stimulate",rec:"Record + spikes",dec:"Decode",env:"Update game",fb:"Feedback",log:"Log everything",
+  prep:"Pre-training",ctl:"Controls",infra:"Infrastructure",an:"Analysis",wet:"Wet lab",culture:"Culture on the MEA"};
+var KEY = {enc:"\u03b8 picks electrode, \u03c9 sets rate",stim:"2 generators, blanking",rec:"artifact removal, spikes",
+  dec:"3 left vs 3 right electrodes",env:"CartPole, one step per 200 ms",fb:"decided after each episode",culture:"wet lab supplies the dish"};
+var POS = {env:[550,100],enc:[766.5,200],stim:[766.5,400],culture:[550,500],rec:[333.5,400],dec:[333.5,200],fb:[550,300]};
+var NH = [95,42];
+var SUPPORT = [
+  {id:"prep",x:120,y:100,feeds:["enc","dec","rec"]},
+  {id:"ctl",x:120,y:300,feeds:["rec","fb","env"]},
+  {id:"wet",x:120,y:500,feeds:["culture"]},
+  {id:"infra",x:980,y:100,feeds:["stim","rec","env"]},
+  {id:"an",x:980,y:500,feeds:["log"]}];
+var SH = [100,50], BAND = {x:550,y:592,hw:250,hh:22};
+var SUPTAG = {prep:"PART 1 \u00b7 BEFORE TRAINING", ctl:"PART 3 \u00b7 SEPARATE RUNS"};
+var SUPVERB = {prep:"sets up", ctl:"tests"};
+var FEED = {enc:"Encode",dec:"Decode",rec:"Record",fb:"Feedback",env:"Step game",stim:"Stimulate",culture:"Culture",log:"Log"};
+ui.stream = null;
+
+function streamColor(i){ return "var(--s"+((i%6)+1)+")"; }
+function streamsAt(id){ var out=[]; STREAMS.forEach(function(s,i){ if(s.links.some(function(l){return l[0]===id;})) out.push(i); }); return out; }
+function linkedTo(id){ if(!ui.stream) return null; var s=STREAMS.filter(function(x){return x.id===ui.stream;})[0]; if(!s) return null; return s.links.some(function(l){return l[0]===id;}); }
+function hlCls(id){ var l=linkedTo(id); if(l===null) return ""; return l? " hl":" cy-dimmed"; }
+function selColor(){ for(var i=0;i<STREAMS.length;i++) if(STREAMS[i].id===ui.stream) return streamColor(i); return "var(--accent)"; }
+function inBox(p,c,hw,hh,m){ return Math.abs(p[0]-c[0])<=hw+m && Math.abs(p[1]-c[1])<=hh+m; }
+function edge(c,hw,hh,to){ var dx=to[0]-c[0], dy=to[1]-c[1]; var t=Math.min(dx?hw/Math.abs(dx):1e9, dy?hh/Math.abs(dy):1e9); return [c[0]+dx*t, c[1]+dy*t]; }
+function boxOf(id){
+  if(POS[id]) return {c:POS[id],hw:NH[0],hh:NH[1]};
+  if(id==="log") return {c:[BAND.x,BAND.y],hw:BAND.hw,hh:BAND.hh};
+  for(var i=0;i<SUPPORT.length;i++) if(SUPPORT[i].id===id) return {c:[SUPPORT[i].x,SUPPORT[i].y],hw:SH[0],hh:SH[1]};
+  return null;
+}
+function dots(id,xr,y){ return streamsAt(id).map(function(si,k){ return '<circle cx="'+(xr-k*13)+'" cy="'+y+'" r="4.5" style="fill:'+streamColor(si)+'"><title>'+esc(STREAMS[si].name)+'</title></circle>'; }).join(""); }
+function f1(n){ return Math.round(n*10)/10; }
+
+function stageNode(id){
+  var c=POS[id], x0=c[0]-NH[0], y0=c[1]-NH[1], w=NH[0]*2, p=prog(id), idx=LOOP_IDS.indexOf(id);
+  var h='<g class="cy-node'+hlCls(id)+'" data-jump="'+id+'" tabindex="0" role="button" aria-label="'+esc(SHORT[id])+'" style="--c:'+selColor()+'">'+
+    '<rect class="box" x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+NH[1]*2+'" rx="7"/>'+
+    '<text class="cy-n" x="'+(x0+12)+'" y="'+(y0+17)+'">PART '+esc(splitCode(byId[id].title)[0]||String(idx+1))+'</text>'+
+    (p.review?'<text class="cy-rv" x="'+(x0+w-12)+'" y="'+(y0+17)+'" text-anchor="end">'+p.review+' to decide</text>':'')+
+    '<text class="cy-t" x="'+(x0+12)+'" y="'+(y0+38)+'">'+esc(SHORT[id])+'</text>'+
+    '<text class="cy-k" x="'+(x0+12)+'" y="'+(y0+53)+'">'+esc(KEY[id]||"")+'</text>'+
+    '<rect class="cy-track" x="'+(x0+12)+'" y="'+(y0+60)+'" width="'+(w-24)+'" height="4" rx="2"/>'+
+    '<rect class="cy-fill" x="'+(x0+12)+'" y="'+(y0+60)+'" width="'+f1((w-24)*p.pct/100)+'" height="4" rx="2"/>'+
+    '<text class="cy-m" x="'+(x0+12)+'" y="'+(y0+77)+'">'+p.done+'/'+p.total+' done</text>'+
+    dots(id, x0+w-14, y0+73)+'</g>';
+  return h;
+}
+function dishNode(){
+  var c=POS.culture, x0=c[0]-NH[0], y0=c[1]-NH[1], w=NH[0]*2, el=[];
+  for(var r=1;r<=8;r++) for(var k=1;k<=8;k++){ if((r===1||r===8)&&(k===1||k===8)) continue;
+    var cls = (r===8&&k>1&&k<8)?" in":(r===1&&k>1&&k<8)?" out":"";
+    el.push('<circle class="cy-elec'+cls+'" cx="'+(x0+16+(k-1)*7.5)+'" cy="'+(y0+16+(r-1)*7.5)+'" r="2.3"/>'); }
+  var p=prog("wet");
+  return '<g class="cy-node dish'+hlCls("wet")+'" data-jump="wet" tabindex="0" role="button" aria-label="Culture on the MEA" style="--c:'+selColor()+'">'+
+    '<rect class="box" x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+NH[1]*2+'" rx="7"/>'+el.join("")+
+    '<text class="cy-n" x="'+(x0+80)+'" y="'+(y0+17)+'">THE DISH</text>'+
+    '<text class="cy-t" x="'+(x0+80)+'" y="'+(y0+38)+'">Culture</text>'+
+    '<text class="cy-k" x="'+(x0+80)+'" y="'+(y0+53)+'">60 electrodes</text>'+
+    '<text class="cy-m" x="'+(x0+80)+'" y="'+(y0+77)+'">wet lab '+p.done+'/'+p.total+'</text></g>';
+}
+function supNode(s){
+  var x0=s.x-SH[0], y0=s.y-SH[1], w=SH[0]*2, p=prog(s.id);
+  return '<g class="cy-sup'+hlCls(s.id)+'" data-jump="'+s.id+'" data-sup="'+s.id+'" tabindex="0" role="button" aria-label="'+esc(SHORT[s.id])+'" style="--c:'+selColor()+'">'+
+    '<rect class="box" x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+SH[1]*2+'" rx="7"/>'+
+    '<text class="cy-n" x="'+(x0+12)+'" y="'+(y0+18)+'">'+(SUPTAG[s.id]||"SUPPORTING")+'</text>'+
+    '<text class="cy-t" x="'+(x0+12)+'" y="'+(y0+40)+'">'+esc(SHORT[s.id])+'</text>'+
+    '<text class="cy-k" x="'+(x0+12)+'" y="'+(y0+57)+'">'+(SUPVERB[s.id]||"feeds")+' '+esc(s.feeds.map(function(f){return FEED[f];}).join(", "))+'</text>'+
+    '<rect class="cy-track" x="'+(x0+12)+'" y="'+(y0+66)+'" width="'+(w-24)+'" height="4" rx="2"/>'+
+    '<rect class="cy-fill" x="'+(x0+12)+'" y="'+(y0+66)+'" width="'+f1((w-24)*p.pct/100)+'" height="4" rx="2"/>'+
+    '<text class="cy-m" x="'+(x0+12)+'" y="'+(y0+86)+'">'+p.done+'/'+p.total+' done</text>'+
+    (p.review?'<text class="cy-rv" x="'+(x0+86)+'" y="'+(y0+86)+'">'+p.review+' to decide</text>':'')+
+    dots(s.id, x0+w-14, y0+82)+'</g>';
+}
+function ringArc(a,b){
+  var boxA=null, boxB=null, pts=[];
+  for(var d=a; d<=b; d+=1){ var r=d*Math.PI/180; pts.push([550+250*Math.cos(r), 300+200*Math.sin(r)]); }
+  var ids = Object.keys(POS).filter(function(k){return k!=="fb";});
+  pts = pts.filter(function(p){ return !ids.some(function(k){ return inBox(p,POS[k],NH[0],NH[1],7); }); });
+  if(pts.length<2) return "";
+  return '<path class="cy-arrow" marker-end="url(#cy-ah)" d="M'+pts.map(function(p){return f1(p[0])+" "+f1(p[1]);}).join(" L")+'"/>';
+}
+function lbl(x,y,txt,anchor,cls){ return '<text class="cy-lbl'+(cls?" "+cls:"")+'" x="'+x+'" y="'+y+'" text-anchor="'+(anchor||"middle")+'">'+esc(txt)+'</text>'; }
+
+function renderCycle(){
+  var box=document.getElementById("cyclebox"); if(!box) return;
+  document.getElementById("streams").innerHTML = STREAMS.map(function(s,i){
+    return '<button class="stream" data-stream="'+s.id+'" aria-pressed="'+(ui.stream===s.id)+'" style="--c:'+streamColor(i)+'"><span class="dot"></span>'+esc(s.name||"Untitled")+' <small>'+esc(s.people)+'</small></button>';
+  }).join("") + (ro()? "" : '<button class="btn" data-act="st-edit" aria-pressed="'+!!ui.editStreams+'">'+(ui.editStreams?"Done editing":"Edit assignments")+'</button>'+(ui.editStreams?'<button class="btn" data-act="st-add">Add assignment</button>':''));
+  var g=[];
+  g.push('<defs><marker id="cy-ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="cy-ah" d="M0 0 L10 5 L0 10 z"/></marker>'+
+         '<marker id="cy-ahf" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="cy-ah fb" d="M0 0 L10 5 L0 10 z"/></marker></defs>');
+  /* ring arrows: step game -> encode -> stimulate -> culture -> record -> decode -> step game */
+  [[-90,-30],[-30,30],[30,90],[90,150],[150,210],[210,270]].forEach(function(p){ g.push(ringArc(p[0],p[1])); });
+  g.push(lbl(696,108,"pole angle \u03b8, velocity \u03c9","start"));
+  g.push(lbl(814,304,"one electrode, pulse rate","start"));
+  g.push(lbl(696,500,"pulses, generator 1","start"));
+  g.push(lbl(406,500,"60 channels at 50 kHz","end"));
+  g.push(lbl(290,304,"spikes","end"));
+  g.push(lbl(406,108,"push left or right","end"));
+  /* feedback path */
+  g.push('<path class="cy-arrow fb" marker-end="url(#cy-ahf)" d="M550 145 L550 254"/>');
+  g.push(lbl(558,204,"episode length","start","fb"));
+  g.push('<path class="cy-arrow fb" marker-end="url(#cy-ahf)" d="M640 318 C 662 330, 668 345, 674 356"/>');
+  g.push(lbl(606,372,"generator 2","middle","fb"));
+  /* logging taps */
+  [[POS.rec,[380,BAND.y-BAND.hh]],[POS.culture,[550,BAND.y-BAND.hh]],[POS.stim,[720,BAND.y-BAND.hh]]].forEach(function(t){
+    g.push('<path class="cy-tap" d="M'+f1(t[0][0])+' '+(t[0][1]+NH[1])+' L'+t[1][0]+' '+t[1][1]+'"/>'); });
+  /* support connectors (shown on hover) */
+  SUPPORT.forEach(function(s){ s.feeds.forEach(function(f){ var tb=boxOf(f); if(!tb) return;
+    var a=edge([s.x,s.y],SH[0],SH[1],tb.c), b=edge(tb.c,tb.hw,tb.hh,[s.x,s.y]);
+    g.push('<path class="cy-conn" data-from="'+s.id+'" marker-end="url(#cy-ah)" d="M'+f1(a[0])+' '+f1(a[1])+' L'+f1(b[0])+' '+f1(b[1])+'"/>'); }); });
+  /* nodes */
+  ["env","enc","stim","rec","dec","fb"].forEach(function(id){ g.push(stageNode(id)); });
+  g.push(dishNode());
+  var lp=prog("log");
+  g.push('<g class="cy-band'+hlCls("log")+'" data-jump="log" tabindex="0" role="button" aria-label="Log everything" style="--c:'+selColor()+'">'+
+    '<rect class="box" x="'+(BAND.x-BAND.hw)+'" y="'+(BAND.y-BAND.hh)+'" width="'+BAND.hw*2+'" height="'+BAND.hh*2+'" rx="7"/>'+
+    '<text class="cy-n" x="'+(BAND.x-BAND.hw+14)+'" y="'+(BAND.y+4)+'">PART 2G</text>'+
+    '<text class="cy-t" x="'+(BAND.x-BAND.hw+70)+'" y="'+(BAND.y+6)+'" style="font-size:16px">Log everything</text>'+
+    '<text class="cy-m" x="'+(BAND.x-BAND.hw+196)+'" y="'+(BAND.y+4)+'">raw voltage, pulses, spikes</text>'+
+    '<text class="cy-m" x="'+(BAND.x+BAND.hw-48)+'" y="'+(BAND.y+4)+'" text-anchor="end">'+lp.done+'/'+lp.total+' done</text>'+
+    dots("log", BAND.x+BAND.hw-14, BAND.y)+'</g>');
+  SUPPORT.forEach(function(s){ g.push(supNode(s)); });
+  box.innerHTML='<svg viewBox="0 38 1100 600" role="img" aria-label="Full closed-loop cycle with the assignments that work on each step">'+g.join("")+'</svg>';
+  var det=document.getElementById("cyc-detail"), s=STREAMS.filter(function(x){return x.id===ui.stream;})[0];
+  if(ui.editStreams && !ro()){ if(s && det.contains(document.activeElement)) return; det.innerHTML = streamEditor(s); return; }
+  if(!s){ det.innerHTML='<p class="cyc-hint" style="margin-top:12px">Select an assignment above to see what it does at each step.</p>'; return; }
+  var ci=STREAMS.indexOf(s);
+  det.innerHTML='<div class="cyc-detail"><h3><span class="stream" style="--c:'+streamColor(ci)+';padding:0;border:0;background:none"><span class="dot"></span></span>'+esc(s.name)+' <small>'+esc(s.people)+'</small></h3><ul>'+
+    s.links.map(function(l){ return '<li><button data-jump="'+l[0]+'">'+esc(SHORT[l[0]]||l[0])+'</button>: '+esc(l[1])+'</li>'; }).join("")+'</ul></div>';
+}
+function streamEditor(s){
+  if(!s) return '<div class="cyc-detail sted"><p class="cyc-hint">Select an assignment above to edit it, or add a new one.</p></div>';
+  var h = '<div class="cyc-detail sted"><div class="grid2"><div class="field"><label for="st-name">Assignment name</label><input id="st-name" data-st="name" value="'+esc(s.name)+'"></div>'+
+    '<div class="field"><label for="st-people">People (comma separated)</label><input id="st-people" data-st="people" value="'+esc(s.people)+'"></div></div>'+
+    '<div class="lab">Steps this assignment works on, and what it does at each</div>';
+  s.links.forEach(function(l,i){
+    h += '<div class="lk"><select data-st="lk-id" data-i="'+i+'" aria-label="Step">'+STEP_IDS.map(function(id){return '<option value="'+id+'"'+(id===l[0]?" selected":"")+'>'+esc(SHORT[id]||id)+'</option>';}).join("")+'</select>'+
+      '<input data-st="lk-txt" data-i="'+i+'" value="'+esc(l[1])+'" placeholder="What they do at this step" aria-label="What they do"><button class="btn x" data-act="st-dellink" data-i="'+i+'">Remove</button></div>';
+  });
+  h += '<div class="row-btns"><button class="btn" data-act="st-addlink">Add a step</button><button class="btn danger" data-act="st-del">Delete assignment</button></div></div>';
+  return h;
+}
+function showConn(id,on){ document.querySelectorAll('.cy-conn[data-from="'+id+'"]').forEach(function(p){ p.classList.toggle("on",on); }); }
+
+function renderAll(){ renderGates(); renderStrip(); renderTree(); renderInsp(); renderSavebar(); renderCycle(); renderSync(); }
+
+/* ---------- editing ---------- */
+var treeTimer=null;
+function touched(full){
+  dirty = true;
+  index();
+  if(full){ renderAll(); return; }
+  clearTimeout(treeTimer); treeTimer = setTimeout(function(){ renderGates(); renderStrip(); renderTree(); renderSavebar(); renderCycle(); }, 160);
+}
+function newId(){ return "n"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function blank(parent){ return {id:newId(),parent:parent,title:"New item",kind:"build",status:"todo",owner:"",gate:"",notes:"",src:"",deps:[],options:[],chosen:null,done:"",needs:[],bugs:[],files:[],deadline:""}; }
+function siblings(n){ return nodes.filter(function(m){return m.parent===n.parent;}); }
+function moveNode(n,dir){
+  var sib = siblings(n); var i = sib.indexOf(n); var j = i+dir; if(j<0||j>=sib.length) return;
+  var other = sib[j]; var a = nodes.indexOf(n), b = nodes.indexOf(other);
+  nodes[a]=other; nodes[b]=n;
+}
+function insertAfterSubtree(target, node){
+  var desc = subtree(target.id); var last = desc.length? desc[desc.length-1] : target;
+  nodes.splice(nodes.indexOf(last)+1, 0, node);
+}
+var armed=null;
+function act(a, btn){
+  var n = ui.sel && byId[ui.sel];
+  if(a==="close"){ ui.sel=null; renderTree(); renderInsp(); return; }
+  if(a==="save"){ if(ghMode) ghSave(); else save(); return; }
+  if(a.indexOf("st-")===0){
+    if(ro()) return; if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    if(a==="st-edit"){ ui.editStreams=!ui.editStreams; renderCycle(); return; }
+    if(a==="st-add"){ var ns={id:"s-"+newId(),name:"New assignment",people:"",links:[]}; STREAMS.push(ns); ui.stream=ns.id; ui.editStreams=true; streamsTouched(true); var nm=document.getElementById("st-name"); if(nm){ nm.focus(); nm.select(); } return; }
+    var cs=curStream(); if(!cs) return;
+    if(a==="st-addlink"){ var used=cs.links.map(function(l){return l[0];}); var pick=STEP_IDS.filter(function(x){return used.indexOf(x)<0;})[0]||STEP_IDS[0]; cs.links.push([pick,""]); streamsTouched(true); return; }
+    if(a==="st-dellink"){ cs.links.splice(+btn.getAttribute("data-i"),1); streamsTouched(true); return; }
+    if(a==="st-del"){
+      if(armedSt!==cs.id){ armedSt=cs.id; btn.classList.add("armed"); btn.textContent="Confirm: delete this assignment"; return; }
+      STREAMS.splice(STREAMS.indexOf(cs),1); ui.stream=null; armedSt=null; streamsTouched(true); return;
+    }
+    return;
+  }
+  if(a==="sync"){ ui.sync=true; renderSync(); var sp=document.getElementById("syncpanel"); if(sp&&sp.scrollIntoView) sp.scrollIntoView({block:"center"}); return; }
+  if(a==="export"){ ghExport(); return; }
+  if(a==="gh-connect"){
+    gh.repo=document.getElementById("gh-repo").value.trim().replace(/^https?:\/\/github\.com\//,"").replace(/\/$/,"");
+    gh.branch=document.getElementById("gh-branch").value.trim()||"main"; gh.token=document.getElementById("gh-token").value.trim();
+    ghStore(); ui.sync=false; renderSync(); renderSavebar(); toast(gh.token?"Connection saved in this browser.":"Repository saved. Add a token to save edits."); ghRefresh(true); return;
+  }
+  if(a==="gh-disconnect"){ gh.token=""; ghStore(); ui.sync=false; renderSync(); renderSavebar(); toast("Token removed from this browser."); return; }
+  if(a==="discard"){ STREAMS=JSON.parse(JSON.stringify(STREAMS_ORIG)); if(ui.stream&&!curStream()) ui.stream=null; nodes.length=0; JSON.parse(JSON.stringify(ORIGINAL)).forEach(function(x){nodes.push(x);}); dirty=false; index(); if(ui.sel&&!byId[ui.sel]) ui.sel=null; renderAll(); return; }
+  if(!n || ro()) return;
+  if(a==="addlist"){ var k=btn.getAttribute("data-key"); n[k]=(n[k]||[]).concat([k==="needs"?{t:"",ok:false}:""]); touched(true); var tas=document.querySelectorAll('textarea[data-list="'+k+'"]'); if(tas.length) tas[tas.length-1].focus(); return; }
+  if(a==="dellist"){ var k2=btn.getAttribute("data-key"); n[k2].splice(+btn.getAttribute("data-i"),1); touched(true); return; }
+  if(a==="addopt"){ n.options=(n.options||[]).concat(["New option"]); touched(true); var last=document.getElementById("e-opt-"+(n.options.length-1)); if(last){last.focus();last.select();} return; }
+  if(a==="delopt"){ var i=+btn.getAttribute("data-i"); n.options.splice(i,1); if(n.chosen===i) n.chosen=null; else if(n.chosen>i) n.chosen--; touched(true); return; }
+  if(a==="clearchosen"){ n.chosen=null; touched(true); return; }
+  if(a==="deldep"){ n.deps = n.deps.filter(function(d){return d!==btn.getAttribute("data-d");}); touched(true); return; }
+  if(a==="addchild"){ var c=blank(n.id); insertAfterSubtree(n,c); ui.open[n.id]=true; saveUI(); ui.sel=c.id; touched(true); focusTitle(); return; }
+  if(a==="addsib"){ var s=blank(n.parent); insertAfterSubtree(n,s); ui.sel=s.id; touched(true); focusTitle(); return; }
+  if(a==="up"||a==="down"){ moveNode(n, a==="up"?-1:1); touched(true); return; }
+  if(a==="del"){
+    if(armed!==n.id){ armed=n.id; var cnt=subtree(n.id).length; btn.classList.add("armed"); btn.textContent = cnt? "Confirm: delete with "+cnt+" sub-items" : "Confirm delete"; return; }
+    var gone = [n.id].concat(subtree(n.id).map(function(m){return m.id;}));
+    for(var k=nodes.length-1;k>=0;k--){ if(gone.indexOf(nodes[k].id)>=0) nodes.splice(k,1); }
+    nodes.forEach(function(m){ m.deps=(m.deps||[]).filter(function(d){return gone.indexOf(d)<0;}); });
+    ui.sel = n.parent; armed=null; touched(true); return;
+  }
+}
+function focusTitle(){ var t=document.getElementById("e-title"); if(t){ t.focus(); t.select(); } }
+
+/* ---------- save / restore ---------- */
+function diff(base, cur){
+  var b={}, c={}, patch={changed:{}, prev:{}, deleted:[]};
+  base.forEach(function(n){b[n.id]=n;});
+  cur.forEach(function(n,i){ c[n.id]=n; if(!b[n.id] || JSON.stringify(b[n.id])!==JSON.stringify(n)){ patch.changed[n.id]=n; patch.prev[n.id]= i>0? cur[i-1].id : null; } });
+  base.forEach(function(n){ if(!c[n.id]) patch.deleted.push(n.id); });
+  return patch;
+}
+function applyPatch(list, patch){
+  var out = list.map(function(n){return JSON.parse(JSON.stringify(n));});
+  var idx = function(id){ for(var i=0;i<out.length;i++) if(out[i].id===id) return i; return -1; };
+  patch.deleted.forEach(function(id){ var i=idx(id); if(i>=0) out.splice(i,1); });
+  Object.keys(patch.changed).forEach(function(id){
+    var n = JSON.parse(JSON.stringify(patch.changed[id])); var i = idx(id);
+    if(i>=0){ out[i]=n; return; }
+    var p = patch.prev[id]; var j = p? idx(p) : -1; out.splice(j+1,0,n);
+  });
+  return out;
+}
+function buildDocument(list){
+  var data = JSON.stringify({schema:2, saved:new Date().toISOString().slice(0,10), nodes:list, streams:STREAMS}).replace(/</g,"\\u003c");
+  var style = document.getElementById("app-style").textContent;
+  var script = document.getElementById("app-script").textContent;
+  var SC = "<"+"/script>", ST = "<"+"/style>";
+  return '<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>'+RESET+ST+'</head><body>\n'+
+    '<title>'+PAGE_TITLE+'</title>\n<meta name="claude:viewport-fit-sides" content="cover">\n'+FONT_LINK+'\n'+
+    '<style id="app-style">'+style+ST+'\n<div id="app"></div>\n'+
+    '<script type="application/json" id="tracker-data">'+data+SC+'\n'+
+    '<script id="app-script">'+script+SC+'\n</body></html>';
+}
+function toast(t){ var d=document.createElement("div"); d.className="toast"; d.setAttribute("role","status"); d.textContent=t; document.body.appendChild(d); setTimeout(function(){d.remove();},2600); }
+function save(){
+  if(!artifactNS || saving) return;
+  saving = true; renderSavebar();
+  try{ sessionStorage.setItem(PENDING_KEY, JSON.stringify(diff(ORIGINAL, nodes))); }catch(e){}
+  artifactNS.publish(buildDocument(nodes)).then(function(){
+    /* the view reloads to the new version */
+  }).catch(function(err){
+    saving=false;
+    var code = err && err.code;
+    if(code==="conflict"){ toast("Someone saved first. Reloading their version; your edits can be restored."); return; }
+    if(code==="not_writer"||code==="not_granted"||code==="consent_required"||code==="capability_disabled"||code==="not_declared"){ canWrite=false; renderAll(); toast("This view is read-only."); return; }
+    if(code==="rate_limited"){ toast("Saving too often. Wait a moment, then save again."); renderSavebar(); return; }
+    toast("Save failed. Try again in a moment."); renderSavebar();
+  });
+}
+function checkPending(){
+  var raw=null; try{ raw = sessionStorage.getItem(PENDING_KEY); }catch(e){}
+  if(!raw) return;
+  var patch; try{ patch=JSON.parse(raw); }catch(e){ return; }
+  var merged = applyPatch(nodes, patch);
+  if(JSON.stringify(merged)===JSON.stringify(nodes)){ try{ sessionStorage.removeItem(PENDING_KEY); }catch(e){} toast("Saved for the team."); return; }
+  var b = document.getElementById("banner");
+  var count = Object.keys(patch.changed).length + patch.deleted.length;
+  b.innerHTML = '<div class="banner"><div class="wrap"><p>Someone else saved before your last save went through. Your '+count+' edited item'+(count===1?"":"s")+' can be re-applied on top of their version.</p>'+
+    '<button class="btn" id="pend-drop">Drop my edits</button><button class="btn primary" id="pend-apply">Re-apply my edits</button></div></div>';
+  document.getElementById("pend-drop").onclick=function(){ try{sessionStorage.removeItem(PENDING_KEY);}catch(e){} b.innerHTML=""; };
+  document.getElementById("pend-apply").onclick=function(){
+    var m = applyPatch(nodes, patch); nodes.length=0; m.forEach(function(x){nodes.push(x);});
+    try{sessionStorage.removeItem(PENDING_KEY);}catch(e){} b.innerHTML=""; touched(true); toast("Edits re-applied. Save to publish them.");
+  };
+}
+
+/* ---------- copy outline ---------- */
+function outline(){
+  computeVisible();
+  var lines=[];
+  function walk(id,d){ var n=byId[id]; if(visible && !visible[id]) return;
+    var bits=[]; if(n.kind!=="area") bits.push(lab(STATUSES,n.status)); if(n.owner) bits.push(n.owner); if(n.gate) bits.push("needed by "+lab(GATES,n.gate)); if(n.deadline && fmtDate(n.deadline)) bits.push("due "+fmtDate(n.deadline)+" "+n.deadline.slice(0,4));
+    var ch = (n.kind==="decision"&&n.chosen!=null&&n.options[n.chosen])? " -> chosen: "+n.options[n.chosen] : "";
+    lines.push(new Array(d+1).join("  ")+"- "+(n.kind!=="area"?"["+lab(KINDS,n.kind)+"] ":"")+n.title+(bits.length?" ("+bits.join(", ")+")":"")+ch);
+    var pad=new Array(d+2).join("  ");
+    if(n.done) lines.push(pad+"  Done when: "+n.done);
+    (n.needs||[]).forEach(function(x){ lines.push(pad+"  ["+(x.ok?"x":" ")+"] "+x.t); });
+    (kids[id]||[]).forEach(function(c){walk(c,d+1);}); }
+  nodes.filter(function(n){return !n.parent;}).forEach(function(r){walk(r.id,0);});
+  return lines.join("\n");
+}
+function copyText(t){
+  function fallback(){ var ta=document.createElement("textarea"); ta.value=t; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select(); var ok=false; try{ok=document.execCommand("copy");}catch(e){} ta.remove(); toast(ok?"Outline copied":"Copy was blocked. Select the text manually."); }
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(function(){toast("Outline copied");}, fallback); } else fallback();
+}
+
+/* ---------- events ---------- */
+function bindToolbar(){
+  var q=document.getElementById("f-q"), k=document.getElementById("f-kind"), s=document.getElementById("f-status"), g=document.getElementById("f-gate"), o=document.getElementById("f-owner"), r=document.getElementById("f-review");
+  o.innerHTML = '<option value="">All owners</option>'+owners().map(function(x){return '<option value="'+esc(x)+'">'+esc(x)+'</option>';}).join("");
+  q.addEventListener("input",function(){ui.q=q.value.trim(); renderTree();});
+  k.addEventListener("change",function(){ui.kind=k.value; renderTree();});
+  s.addEventListener("change",function(){ui.status=s.value; renderTree();});
+  g.addEventListener("change",function(){ui.gate=g.value; renderTree();});
+  o.addEventListener("change",function(){ui.owner=o.value; renderTree();});
+  document.getElementById("f-due").addEventListener("change",function(e){ui.due=e.target.value; renderTree();});
+  document.getElementById("b-sync").addEventListener("click",function(){ ui.sync=!ui.sync; renderSync(); });
+  r.addEventListener("click",function(){ui.review=!ui.review; r.setAttribute("aria-pressed",String(ui.review)); renderTree();});
+  document.getElementById("b-expand").addEventListener("click",function(){ nodes.forEach(function(n){ if((kids[n.id]||[]).length) ui.open[n.id]=true; }); saveUI(); renderTree(); });
+  document.getElementById("b-collapse").addEventListener("click",function(){ ui.open={root:true}; saveUI(); renderTree(); });
+  document.getElementById("b-copy").addEventListener("click",function(){ copyText(outline()); });
+}
+function select(id){ ui.sel=id; armed=null; renderTree(); renderInsp(); }
+function reveal(id){ var p=byId[id]?byId[id].parent:null; while(p){ ui.open[p]=true; p=byId[p]?byId[p].parent:null; } saveUI(); }
+
+app.addEventListener("click",function(e){
+  var gf=e.target.closest("[data-gatefilter]");
+  if(gf){ var gv=gf.getAttribute("data-gatefilter"); var on=gf.getAttribute("aria-pressed")==="true";
+    document.querySelectorAll("[data-gatefilter]").forEach(function(b){b.setAttribute("aria-pressed","false");});
+    ui.review=false; ui.gate=""; var rb=document.getElementById("f-review"); rb.setAttribute("aria-pressed","false"); document.getElementById("f-gate").value="";
+    if(!on){ gf.setAttribute("aria-pressed","true"); if(gv==="review"){ ui.review=true; rb.setAttribute("aria-pressed","true"); } else { ui.gate=gv; document.getElementById("f-gate").value=gv; } }
+    renderTree(); var tb=document.getElementById("tree"); if(tb && !on) tb.scrollIntoView({block:"start",behavior:"smooth"}); return; }
+  var sb=e.target.closest("[data-stream]");
+  if(sb){ var sid=sb.getAttribute("data-stream"); ui.stream = ui.stream===sid? null : sid; renderCycle(); return; }
+  var t=e.target.closest("[data-tog],[data-jump],[data-go],[data-act],.row"); if(!t) return;
+  if(t.hasAttribute("data-tog")){ e.stopPropagation(); var id=t.getAttribute("data-tog"); ui.open[id]=!ui.open[id]; saveUI(); renderTree(); return; }
+  if(t.hasAttribute("data-jump")){ var j=t.getAttribute("data-jump"); reveal(j); ui.open[j]=true; saveUI(); select(j); var row=document.querySelector('.row[data-id="'+j+'"]'); if(row) row.scrollIntoView({block:"start",behavior:"smooth"}); return; }
+  if(t.hasAttribute("data-go")){ var gid=t.getAttribute("data-go"); reveal(gid); select(gid); var r2=document.querySelector('.row[data-id="'+gid+'"]'); if(r2) r2.scrollIntoView({block:"center",behavior:"smooth"}); return; }
+  if(t.hasAttribute("data-act")){ act(t.getAttribute("data-act"), t); return; }
+  if(t.classList.contains("row")){ select(t.getAttribute("data-id")); }
+});
+app.addEventListener("input",function(e){
+  var t=e.target;
+  if(t.hasAttribute && t.hasAttribute("data-st") && t.tagName!=="SELECT"){ if(ro()) return; var cs=curStream(); if(!cs) return; var k=t.getAttribute("data-st");
+    if(k==="name") cs.name=t.value; else if(k==="people") cs.people=t.value; else if(k==="lk-txt") cs.links[+t.getAttribute("data-i")][1]=t.value;
+    streamsTouched(false); return; }
+  var n = ui.sel && byId[ui.sel]; if(!n||ro()) return;
+  if(t.id==="e-title"){ n.title=t.value; touched(false); }
+  else if(t.id==="e-owner"){ n.owner=t.value; touched(false); }
+  else if(t.id==="e-notes"){ n.notes=t.value; autosize(t); touched(false); }
+  else if(t.id==="e-src"){ n.src=t.value; touched(false); }
+  else if(t.id==="e-done"){ n.done=t.value; autosize(t); touched(false); }
+  else if(t.hasAttribute("data-list")){ var k=t.getAttribute("data-list"), i=+t.getAttribute("data-i"); if(k==="needs") n.needs[i].t=t.value; else n[k][i]=t.value; autosize(t); touched(false); }
+  else if(t.hasAttribute("data-opt")){ n.options[+t.getAttribute("data-opt")]=t.value; touched(false); }
+});
+app.addEventListener("change",function(e){
+  var t=e.target;
+  if(t.hasAttribute && t.getAttribute("data-st")==="lk-id"){ if(ro()) return; var cs=curStream(); if(!cs) return; cs.links[+t.getAttribute("data-i")][0]=t.value; if(document.activeElement&&document.activeElement.blur) document.activeElement.blur(); streamsTouched(true); return; }
+  var n = ui.sel && byId[ui.sel]; if(!n||ro()) return;
+  if(t.id==="e-kind"){ n.kind=t.value; touched(true); }
+  else if(t.id==="e-status"){ n.status=t.value; touched(true); }
+  else if(t.id==="e-gate"){ n.gate=t.value; touched(true); }
+  else if(t.id==="e-deadline"){ n.deadline=t.value; touched(true); }
+  else if(t.hasAttribute("data-need-ok")){ n.needs[+t.getAttribute("data-need-ok")].ok=t.checked; touched(true); }
+  else if(t.hasAttribute("data-chosen")){ n.chosen=+t.getAttribute("data-chosen"); if(n.kind==="decision" && (n.status==="todo"||n.status==="research"||n.status==="proposed")) n.status="decided"; touched(true); }
+  else if(t.id==="e-adddep" && t.value){ n.deps=(n.deps||[]).concat([t.value]); touched(true); }
+});
+app.addEventListener("mouseover",function(e){ var s=e.target.closest&&e.target.closest("[data-sup]"); if(s) showConn(s.getAttribute("data-sup"),true); });
+app.addEventListener("mouseout",function(e){ var s=e.target.closest&&e.target.closest("[data-sup]"); if(s && !(e.relatedTarget && s.contains(e.relatedTarget))) showConn(s.getAttribute("data-sup"),false); });
+app.addEventListener("focusin",function(e){ var s=e.target.closest&&e.target.closest("[data-sup]"); if(s) showConn(s.getAttribute("data-sup"),true); });
+app.addEventListener("focusout",function(e){ var s=e.target.closest&&e.target.closest("[data-sup]"); if(s) showConn(s.getAttribute("data-sup"),false); });
+app.addEventListener("keydown",function(e){
+  var jg=e.target.closest&&e.target.closest("g[data-jump]");
+  if(jg && (e.key==="Enter"||e.key===" ")){ e.preventDefault(); jg.dispatchEvent(new MouseEvent("click",{bubbles:true})); return; }
+  var row = e.target.closest && e.target.closest(".row");
+  if(row && (e.key==="Enter"||e.key===" ") && e.target===row){ e.preventDefault(); select(row.getAttribute("data-id")); }
+});
+
+/* ---------- boot ---------- */
+shell(); renderMEA(); renderAll();
+document.querySelectorAll(".row").forEach(function(r){r.tabIndex=0;});
+var mo = new MutationObserver(function(){ document.querySelectorAll(".row:not([tabindex])").forEach(function(r){r.tabIndex=0;}); });
+mo.observe(document.getElementById("tree"),{childList:true,subtree:true});
+checkPending();
+if(ghMode){
+  ghRefresh(true);
+  document.addEventListener("visibilitychange",function(){ if(!document.hidden) ghRefresh(true); });
+}
+
+if(window.claude && typeof window.claude.use==="function"){
+  window.claude.use("artifact").then(function(ns){ artifactNS = ns || null; renderSavebar(); }).catch(function(){ artifactNS=null; });
+  window.claude.use("user").then(function(u){
+    if(!u) return; return u.canEdit().then(function(ok){ canWrite = !!ok; renderInsp(); renderSavebar(); });
+  }).catch(function(){});
+}
+window.addEventListener("beforeunload",function(e){ if(dirty && !saving){ e.preventDefault(); e.returnValue=""; } });
+})();
+</script>
+
+</body></html>
